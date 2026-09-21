@@ -2,11 +2,14 @@
 
 import React, { useState } from "react";
 import { useSession } from "next-auth/react";
+import { useToast } from "@/components/Toast";
+import Link from "next/link";
 
 export default function UploadReceiptPage() {
   const { data: session } = useSession();
   const [transactionNumber, setTransactionNumber] = useState("");
   const [amount, setAmount] = useState("");
+  const [sahyogType, setSahyogType] = useState("Jivandan");
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +28,10 @@ export default function UploadReceiptPage() {
       setError("Amount must be greater than zero");
       return;
     }
+    if (!sahyogType) {
+      setError("Please select a Sahyog Type");
+      return;
+    }
     if (!file) {
       setError("Please attach a receipt file (PDF/JPG/PNG)");
       return;
@@ -35,6 +42,7 @@ export default function UploadReceiptPage() {
       const form = new FormData();
       form.append("transactionNumber", transactionNumber.trim());
       form.append("amount", amount.toString());
+      form.append("sahyogType", sahyogType);
       form.append("file", file);
 
       const resp = await fetch("/api/receipts/upload", { method: "POST", body: form });
@@ -46,8 +54,10 @@ export default function UploadReceiptPage() {
         setTransactionNumber("");
         setAmount("");
         setFile(null);
-        // reload the page so user can refresh view and upload additional receipts
-        window.location.reload();
+        // show toast and let user navigate to view page
+        try {
+          showToast("Your receipt has been successfully uploaded. You can now view it on the View Sahyog Receipt page.", "success");
+        } catch (e) {}
       }
     } catch (err) {
       setError("Upload failed. Please try again.");
@@ -55,6 +65,8 @@ export default function UploadReceiptPage() {
       setLoading(false);
     }
   };
+
+  const { showToast } = useToast();
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -70,6 +82,17 @@ export default function UploadReceiptPage() {
         <div>
           <label className="label-text">Amount (₹)</label>
           <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" className="mt-1 w-full rounded border p-2" required />
+        </div>
+
+        <div>
+          <label className="label-text">Sahyog Type</label>
+          <select value={sahyogType} onChange={(e) => setSahyogType(e.target.value)} className="mt-1 w-full rounded border p-2" required>
+            <option value="Jivandan">Jivandan</option>
+            <option value="Kanyadan">Kanyadan</option>
+            <option value="Gatiman Sahyog">Gatiman Sahyog</option>
+            <option value="Present Maintenance Sahyog">Present Maintenance Sahyog</option>
+            <option value="Future Sahyog Type">Future Sahyog Type</option>
+          </select>
         </div>
 
         <div>
@@ -100,6 +123,11 @@ export default function UploadReceiptPage() {
                 </a>
               </div>
             )}
+            <div className="mt-3 flex gap-2">
+              <Link href="/view-sahyog-receipt" className="rounded bg-sky-600 px-3 py-1 text-white">
+                View Sahyog Receipts
+              </Link>
+            </div>
           </div>
         )}
 

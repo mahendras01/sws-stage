@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { requireAuth } from "@/lib/auth";
-import { createReceipt, getReceiptByTransactionNumber } from "@/lib/db";
+import { createReceipt, getReceiptByTransactionNumber, updateReceipt, deleteReceipt, getReceiptById } from "@/lib/db";
+import { generateReceiptPdf } from "@/lib/pdf";
 import fs from "fs";
 import path from "path";
 
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
     const transactionNumber = String(form.get("transactionNumber") ?? "").trim();
     const amountRaw = form.get("amount");
     const amount = amountRaw ? Number(amountRaw) : null;
+    const sahyogType = String(form.get("sahyogType") ?? "").trim();
 
     if (!transactionNumber) {
       console.log("[receipts.upload] Missing transactionNumber");
@@ -53,6 +55,11 @@ export async function POST(request: Request) {
     if (!amount || Number.isNaN(amount) || amount <= 0) {
       console.log("[receipts.upload] Invalid amount:", amount);
       return NextResponse.json({ success: false, message: "Invalid amount" }, { status: 400 });
+    }
+
+    if (!sahyogType) {
+      console.log("[receipts.upload] Missing sahyogType");
+      return NextResponse.json({ success: false, message: "Sahyog Type is required" }, { status: 400 });
     }
 
     // Server-side uniqueness check
@@ -111,6 +118,7 @@ export async function POST(request: Request) {
       transaction_number: transactionNumber,
       user_id: session.user.id,
       amount: Number(amount),
+      sahyog_type: sahyogType,
       file_name: safeFileName,
       file_path: relativeFilePath,
       uploaded_file_path: relativeFilePath,
@@ -135,8 +143,54 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: "Failed to save receipt", details: (error as any)?.message ?? null }, { status: 500 });
     }
 
-    console.log("[receipts.upload] Success, returning response for receipt id:", data?.id);
-    return NextResponse.json({ success: true, message: "Receipt uploaded", receipt: data, file_path: relativeFilePath });
+    console.log("[receipts.upload] Success, receipt inserted with id:", data?.id);
+
+    // Generate acknowledgement PDF and update receipt record with generated path
+    try {
+      // fetch user details for PDF
+      const userId = session.user.id;
+      const { data: userData } = await getReceiptById(String(data.id));
+      // build minimal user object from session where possible
+      const user = {
+        name: session.user.name ?? null,
+        phone_number: (session.user as any).phone_number ?? null,
+        email: session.user.email ?? null,
+      };
+
+      const logoPath = path.join(process.cwd(), "public", "images", "Self_Welfare_Society_Registration.jpg");
+      const pdfRelPath = await generateReceiptPdf(data as any, user as any, { logoPath });
+
+      // update receipt record with generated PDF path in `receipt_file_path`
+      const { data: updated, error: updErr } = await updateReceipt(String((data as any).id), { receipt_file_path: pdfRelPath });
+      if (updErr) {
+        console.error("[receipts.upload] Failed to update receipt with pdf path:", updErr);
+        // cleanup: delete created PDF and DB record
+        try {
+          await fs.promises.unlink(path.join(process.cwd(), pdfRelPath));
+        } catch (e) {
+          console.error("[receipts.upload] Failed to remove generated pdf after update failure:", e);
+        }
+        await deleteReceipt(String((data as any).id));
+        return NextResponse.json({ success: false, message: "Failed to finalize receipt", details: (updErr as any)?.message ?? null }, { status: 500 });
+      }
+
+      console.log("[receipts.upload] PDF generated and receipt updated:", pdfRelPath);
+      return NextResponse.json({ success: true, message: "Receipt uploaded", receipt: updated ?? data, file_path: relativeFilePath, receipt_pdf: pdfRelPath });
+    } catch (pdfErr) {
+      console.error("[receipts.upload] PDF generation failed:", pdfErr);
+      // Attempt cleanup: delete DB record and the uploaded file
+      try {
+        await deleteReceipt(String((data as any).id));
+      } catch (e) {
+        console.error("[receipts.upload] Failed to delete receipt after PDF failure:", e);
+      }
+      try {
+        await fs.promises.unlink(resolved);
+      } catch (e) {
+        console.error("[receipts.upload] Failed to remove uploaded file after PDF failure:", e);
+      }
+      return NextResponse.json({ success: false, message: "Failed to generate acknowledgement PDF", details: (pdfErr as any)?.message ?? null }, { status: 500 });
+    }
   } catch (err) {
     // Log and return error details for debugging (adjust in production)
     console.error("[receipts.upload] Unhandled exception in receipts upload:", err);

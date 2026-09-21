@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 const publicMenuItems: Array<{ href: string; label: string }> = [
   { href: "/", label: "HOME" },
   { href: "/about-us", label: "ABOUT US" },
+  { href: "/gallery", label: "GALLERY" },
   { href: "/sahyog-list", label: "SAHYOG LIST" },
   { href: "/jivandan-list", label: "JIVANDAN LIST" },
   { href: "/kanyadan-list", label: "KANYADAN LIST" },
@@ -25,7 +26,9 @@ export default function Navbar() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const uploadRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -36,6 +39,9 @@ export default function Navbar() {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setUserMenuOpen(false);
+      }
+      if (uploadRef.current && !uploadRef.current.contains(event.target as Node)) {
+        setUploadOpen(false);
       }
     };
 
@@ -58,7 +64,6 @@ export default function Navbar() {
   const navItems: NavItem[] = session
     ? [
         ...publicMenuItems.filter((item) => item.label !== "LOGIN" && item.label !== "REGISTER"),
-        { href: "/upload-receipt", label: "Upload Receipt" },
         ...(session.user.is_admin ? [{ href: "/dashboard", label: "DASHBOARD" }] : []),
         ...(session.user.is_admin ? [{ href: "/admin", label: "ADMIN" }] : []),
       ]
@@ -96,43 +101,73 @@ export default function Navbar() {
                 </Link>
               )
             )}
-
             {session && (
-              <div ref={userMenuRef} className="relative ml-1">
-                <button
-                  type="button"
-                  onClick={() => setUserMenuOpen((prev) => !prev)}
-                  className="flex items-center gap-2 rounded-full bg-sky-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-800"
-                >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold text-sky-700">
-                    {getInitials(session.user.name)}
-                  </span>
-                  <span className="hidden lg:inline">{session.user.name}</span>
-                </button>
+              <>
+                <div ref={uploadRef} className="relative ml-1">
+                  <button
+                    type="button"
+                    onClick={() => setUploadOpen((prev) => !prev)}
+                    className="rounded-full px-3 py-2 text-sm font-semibold text-white transition-all duration-200 hover:bg-sky-700 hover:text-white"
+                  >
+                    Upload Receipt
+                  </button>
 
-                {userMenuOpen && (
-                  <div className="absolute right-0 z-50 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
-                    <Link
-                      href="/profile"
-                      className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                      onClick={() => setUserMenuOpen(false)}
-                    >
-                      My Profile
-                    </Link>
-                    {/* Upload Receipt moved to main navbar */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUserMenuOpen(false);
-                        void handleLogout();
-                      }}
-                      className="mt-1 block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                    >
-                      Logout
-                    </button>
-                  </div>
-                )}
-              </div>
+                  {uploadOpen && (
+                    <div className="absolute left-0 mt-2 w-44 rounded-xl border bg-white p-2 shadow-lg">
+                      <Link
+                        href="/upload-receipt"
+                        onClick={() => setUploadOpen(false)}
+                        className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                      >
+                        Upload Sahyog Receipt
+                      </Link>
+                      <Link
+                        href="/view-sahyog-receipt"
+                        onClick={() => setUploadOpen(false)}
+                        className="mt-1 block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                      >
+                        View Sahyog Receipt
+                      </Link>
+                    </div>
+                  )}
+                </div>
+
+                <div ref={userMenuRef} className="relative ml-1">
+                  <button
+                    type="button"
+                    onClick={() => setUserMenuOpen((prev) => !prev)}
+                    className="flex items-center gap-2 rounded-full bg-sky-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-800"
+                  >
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold text-sky-700">
+                      {getInitials(session.user.name)}
+                    </span>
+                    <span className="hidden lg:inline">{session.user.name}</span>
+                  </button>
+
+                  {userMenuOpen && (
+                    <div className="absolute right-0 z-50 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+                      <Link
+                        href="/profile"
+                        className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                        onClick={() => setUserMenuOpen(false)}
+                      >
+                        My Profile
+                      </Link>
+                      {/* Upload Receipt moved to main navbar */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          void handleLogout();
+                        }}
+                        className="mt-1 block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                      >
+                        Logout
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -201,6 +236,25 @@ export default function Navbar() {
                   </Link>
                 )
               )}
+
+            {session && (
+              <>
+                <Link
+                  href="/upload-receipt"
+                  onClick={() => setMenuOpen(false)}
+                  className="rounded-lg px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-700"
+                >
+                  Upload Sahyog Receipt
+                </Link>
+                <Link
+                  href="/view-sahyog-receipt"
+                  onClick={() => setMenuOpen(false)}
+                  className="rounded-lg px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-700"
+                >
+                  View Sahyog Receipt
+                </Link>
+              </>
+            )}
 
             {session && (
               <div className="mt-2 rounded-lg border border-sky-500 bg-sky-700 p-2">

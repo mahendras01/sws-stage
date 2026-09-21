@@ -488,29 +488,111 @@ export async function invalidatePasswordResetTokensForUser(userId: string, usedA
 
   return { error };
 }
+export async function getSahyogList(opts?: { q?: string; page?: number; pageSize?: number; sahyogType?: string }) {
+  const q = opts?.q?.trim() ?? "";
+  const requestedType = opts?.sahyogType?.trim() ?? "";
+  const normalizedType = requestedType ? requestedType.toLowerCase() : "";
+  const page = opts?.page && opts.page > 0 ? opts.page : 1;
+  const pageSize = opts?.pageSize && opts.pageSize > 0 ? Math.min(opts.pageSize, 100) : 20;
 
-export async function markPasswordResetTokenUsed(tokenId: string, usedAt: Date) {
-  const { error } = await supabase
-    .from("password_reset_tokens")
-    .update({ used_at: usedAt.toISOString() })
-    .eq("id", tokenId);
+  try {
+    let userIds: string[] | null = null;
+    if (q !== "") {
+      const orExpr = `name.ilike.%${q}%,ehrms_code.ilike.%${q}%,phone_number.ilike.%${q}%`;
+      const { data: usersFound } = await supabase.from("users").select("id").or(orExpr).limit(2000);
+      userIds = (usersFound ?? []).map((u: any) => u.id).filter(Boolean);
+      if (userIds.length === 0) {
+        return { data: [], count: 0 };
+      }
+    }
 
-  return { error };
-}
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize - 1;
 
-export async function updateUserPassword(userId: string, passwordHash: string) {
-  const { error } = await supabase.from("users").update({ password_hash: passwordHash }).eq("id", userId);
-  return { error };
-}
+    let query = supabase.from("receipts").select("*", { count: "exact" }).order("created_at", { ascending: false });
 
-// Receipts
-export async function getReceiptByTransactionNumber(transactionNumber: string) {
-  const { data, error } = await supabase
-    .from("receipts")
-    .select("*")
-    .eq("transaction_number", transactionNumber)
-    .maybeSingle();
-  return { data, error };
+    if (normalizedType) {
+      query = query.ilike("sahyog_type", normalizedType);
+    }
+
+    if (userIds && userIds.length > 0) {
+      query = query.in("user_id", userIds);
+    }
+
+    const { data: receipts, count, error } = await query.range(start, end);
+    if (error) return { data: null, count: 0, error };
+
+    const rows = receipts ?? [];
+    if (rows.length === 0) {
+      return { data: [], count: count ?? 0 };
+    }
+
+    const userIdsInRows = Array.from(new Set(rows.map((r: any) => r.user_id).filter(Boolean)));
+
+    const usersMap: Record<string, any> = {};
+    if (userIdsInRows.length > 0) {
+      const { data: users } = await supabase
+        .from("users")
+        .select("id,name,ehrms_code,phone_number,department_id,block,district,village_city")
+        .in("id", userIdsInRows);
+      (users ?? []).forEach((u: any) => (usersMap[u.id] = u));
+    }
+
+    const deptIds = Array.from(new Set(Object.values(usersMap).map((u: any) => u.department_id).filter(Boolean)));
+    const deptMap: Record<string, any> = {};
+    if (deptIds.length > 0) {
+      const { data: depts } = await supabase.from("departments").select("id,name").in("id", deptIds);
+      (depts ?? []).forEach((d: any) => (deptMap[d.id] = d));
+    }
+
+    const latestContributionByUser: Record<string, any> = {};
+    if (userIdsInRows.length > 0) {
+      const { data: contributions } = await supabase
+        .from("contributions")
+        .select("id, contributor_id, death_id, contribution_date, created_at")
+        .in("contributor_id", userIdsInRows)
+        .order("contribution_date", { ascending: false });
+
+      for (const contribution of contributions ?? []) {
+        const key = contribution.contributor_id;
+        const contributionDate = contribution.contribution_date ?? contribution.created_at;
+        if (!key) continue;
+        if (!latestContributionByUser[key] || new Date(contributionDate) > new Date(latestContributionByUser[key].contribution_date ?? latestContributionByUser[key].created_at)) {
+          latestContributionByUser[key] = contribution;
+        }
+      }
+    }
+
+    const deathIds = Array.from(new Set(Object.values(latestContributionByUser).map((c: any) => c.death_id).filter(Boolean)));
+    const deathsMap: Record<string, any> = {};
+    if (deathIds.length > 0) {
+      const { data: deaths } = await supabase.from("deaths").select("id,member_name").in("id", deathIds);
+      (deaths ?? []).forEach((d: any) => (deathsMap[d.id] = d));
+    }
+
+    const items = rows.map((receipt: any) => {
+      const user = usersMap[receipt.user_id] ?? null;
+      const dept = user && user.department_id ? deptMap[user.department_id] : null;
+      const latestContribution = latestContributionByUser[receipt.user_id] ?? null;
+      const lateUserName = latestContribution?.death_id ? deathsMap[latestContribution.death_id]?.member_name ?? null : null;
+      const contributionDate = latestContribution?.contribution_date ?? latestContribution?.created_at ?? receipt.created_at ?? receipt.updated_at;
+
+      return {
+        id: receipt.id,
+        ehrms_code: user?.ehrms_code ?? null,
+        user_name: user?.name ?? null,
+        department: dept?.name ?? null,
+        block: user?.block ?? user?.village_city ?? null,
+        district: user?.district ?? null,
+        late_user_name: lateUserName,
+        date: contributionDate,
+      };
+    });
+
+    return { data: items, count: count ?? 0 };
+  } catch (err) {
+    return { data: null, count: 0, error: err };
+  }
 }
 
 export async function createReceipt(receiptData: Record<string, unknown>) {
@@ -518,16 +600,51 @@ export async function createReceipt(receiptData: Record<string, unknown>) {
   return { data, error };
 }
 
-export async function getReceiptsByUser(userId: string) {
+export async function getReceiptByTransactionNumber(transactionNumber: string) {
   const { data, error } = await supabase
     .from("receipts")
     .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+    .eq("transaction_number", transactionNumber.trim())
+    .maybeSingle();
   return { data, error };
 }
 
 export async function getReceiptById(receiptId: string) {
-  const { data, error } = await supabase.from("receipts").select("*").eq("id", receiptId).maybeSingle();
+  const { data, error } = await supabase.from("receipts").select("*").eq("id", receiptId).single();
+  return { data, error };
+}
+
+export async function updateReceipt(receiptId: string, updates: Record<string, unknown>) {
+  const { data, error } = await supabase.from("receipts").update(updates).eq("id", receiptId).select().single();
+  return { data, error };
+}
+
+export async function deleteReceipt(receiptId: string) {
+  const { error } = await supabase.from("receipts").delete().eq("id", receiptId);
+  return { error };
+}
+
+export async function getReceiptsByUser(userId: string) {
+  const { data, error } = await supabase.from("receipts").select("*").eq("user_id", userId).order("created_at", { ascending: false });
+  return { data: data as any[] | null, error };
+}
+
+export async function markPasswordResetTokenUsed(tokenId: string, usedAt: Date) {
+  const { data, error } = await supabase
+    .from("password_reset_tokens")
+    .update({ used_at: usedAt.toISOString() })
+    .eq("id", tokenId)
+    .select()
+    .single();
+  return { data, error };
+}
+
+export async function updateUserPassword(userId: string, passwordHash: string) {
+  const { data, error } = await supabase
+    .from("users")
+    .update({ password_hash: passwordHash, updated_at: new Date().toISOString() })
+    .eq("id", userId)
+    .select()
+    .single();
   return { data, error };
 }

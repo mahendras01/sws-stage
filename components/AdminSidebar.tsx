@@ -12,6 +12,7 @@ export default function AdminSidebar() {
 
   const isDistrictScopedAdmin = session?.user?.role === "district_admin" || session?.user?.role === "district_co_admin";
   const isCountryLevelAdmin = session?.user?.role === "super_admin" || session?.user?.role === "country_co_admin";
+  const isGalleryManager = ["super_admin", "country_co_admin", "district_admin", "district_co_admin"].includes(session?.user?.role ?? "");
 
   const navItems = isDistrictScopedAdmin
     ? [
@@ -21,6 +22,7 @@ export default function AdminSidebar() {
           label: "District Approvals",
         },
         { href: "/admin/registered-members", label: "Registered Members" },
+        ...(isGalleryManager ? [{ href: "/admin/gallery", label: "Gallery" }] : []),
       ]
     : [
         { href: "/admin", label: "Dashboard", exact: true },
@@ -31,6 +33,7 @@ export default function AdminSidebar() {
         { href: "/admin/registered-members", label: "Registered Members" },
         { href: "/admin/add-death", label: "Add Death" },
         { href: "/admin/view-deaths", label: "View Deaths" },
+        ...(isGalleryManager ? [{ href: "/admin/gallery", label: "Gallery" }] : []),
         ...(isCountryLevelAdmin ? [{ href: "/admin/create-admin", label: "Create Admin" }] : []),
         ...(isCountryLevelAdmin ? [{ href: "/admin/manage-admins", label: "Manage Admins" }] : []),
       ];
