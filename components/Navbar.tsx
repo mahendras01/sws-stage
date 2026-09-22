@@ -64,6 +64,7 @@ export default function Navbar() {
   const navItems: NavItem[] = session
     ? [
         ...publicMenuItems.filter((item) => item.label !== "LOGIN" && item.label !== "REGISTER"),
+        { href: "/annual-maintenance", label: "ANNUAL MAINTENANCE" },
         ...(session.user.is_admin ? [{ href: "/dashboard", label: "DASHBOARD" }] : []),
         ...(session.user.is_admin ? [{ href: "/admin", label: "ADMIN" }] : []),
       ]
@@ -76,16 +77,16 @@ export default function Navbar() {
 
   return (
     <nav className="sticky top-0 z-50 border-b border-sky-700 bg-sky-600 shadow-md">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
-        <div className="hidden flex-1 items-center justify-center md:flex">
-          <div className="flex flex-wrap items-center justify-center gap-2">
+      <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-2 px-3 py-2.5 sm:px-4 lg:px-6">
+        <div className="hidden flex-1 min-w-0 items-center justify-center md:flex">
+          <div className="flex w-full items-center justify-center gap-1 overflow-x-auto whitespace-nowrap text-center">
             {navItems.map((item) =>
               item.href === null ? (
                 <button
                   key={item.label}
                   type="button"
                   onClick={item.action}
-                  className="rounded-full px-3 py-2 text-sm font-semibold text-white transition-all duration-200 hover:bg-sky-700 hover:text-white"
+                  className="flex-shrink-0 rounded-full px-2 py-1.5 text-[10px] font-semibold text-white transition-all duration-200 hover:bg-sky-700 hover:text-white sm:text-[11px] xl:px-3 xl:py-2 xl:text-xs 2xl:text-sm"
                 >
                   {item.label}
                 </button>
@@ -93,7 +94,7 @@ export default function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`rounded-full px-3 py-2 text-sm font-semibold text-white transition-all duration-200 hover:bg-sky-700 hover:text-white ${
+                  className={`flex-shrink-0 rounded-full px-2 py-1.5 text-[10px] font-semibold text-white transition-all duration-200 hover:bg-sky-700 hover:text-white sm:text-[11px] xl:px-3 xl:py-2 xl:text-xs 2xl:text-sm ${
                     isActive(item.href) ? "bg-sky-800 shadow-sm" : "bg-transparent"
                   }`}
                 >
@@ -101,76 +102,76 @@ export default function Navbar() {
                 </Link>
               )
             )}
-            {session && (
-              <>
-                <div ref={uploadRef} className="relative ml-1">
-                  <button
-                    type="button"
-                    onClick={() => setUploadOpen((prev) => !prev)}
-                    className="rounded-full px-3 py-2 text-sm font-semibold text-white transition-all duration-200 hover:bg-sky-700 hover:text-white"
-                  >
-                    Upload Receipt
-                  </button>
-
-                  {uploadOpen && (
-                    <div className="absolute left-0 mt-2 w-44 rounded-xl border bg-white p-2 shadow-lg">
-                      <Link
-                        href="/upload-receipt"
-                        onClick={() => setUploadOpen(false)}
-                        className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                      >
-                        Upload Sahyog Receipt
-                      </Link>
-                      <Link
-                        href="/view-sahyog-receipt"
-                        onClick={() => setUploadOpen(false)}
-                        className="mt-1 block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-                      >
-                        View Sahyog Receipt
-                      </Link>
-                    </div>
-                  )}
-                </div>
-
-                <div ref={userMenuRef} className="relative ml-1">
-                  <button
-                    type="button"
-                    onClick={() => setUserMenuOpen((prev) => !prev)}
-                    className="flex items-center gap-2 rounded-full bg-sky-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-sky-800"
-                  >
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold text-sky-700">
-                      {getInitials(session.user.name)}
-                    </span>
-                    <span className="hidden lg:inline">{session.user.name}</span>
-                  </button>
-
-                  {userMenuOpen && (
-                    <div className="absolute right-0 z-50 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
-                      <Link
-                        href="/profile"
-                        className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                        onClick={() => setUserMenuOpen(false)}
-                      >
-                        My Profile
-                      </Link>
-                      {/* Upload Receipt moved to main navbar */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUserMenuOpen(false);
-                          void handleLogout();
-                        }}
-                        className="mt-1 block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                      >
-                        Logout
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
           </div>
         </div>
+
+        {session && (
+          <div className="hidden items-center gap-2 md:flex">
+            <div ref={uploadRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setUploadOpen((prev) => !prev)}
+                className="rounded-full px-3 py-2 text-xs font-semibold text-white transition-all duration-200 hover:bg-sky-700 hover:text-white xl:text-sm"
+              >
+                Upload Receipt
+              </button>
+
+              {uploadOpen && (
+                <div className="absolute left-0 mt-2 w-44 rounded-xl border bg-white p-2 shadow-lg">
+                  <Link
+                    href="/upload-receipt"
+                    onClick={() => setUploadOpen(false)}
+                    className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                  >
+                    Upload Sahyog Receipt
+                  </Link>
+                  <Link
+                    href="/view-sahyog-receipt"
+                    onClick={() => setUploadOpen(false)}
+                    className="mt-1 block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                  >
+                    View Sahyog Receipt
+                  </Link>
+                </div>
+              )}
+            </div>
+
+            <div ref={userMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen((prev) => !prev)}
+                className="flex items-center gap-2 rounded-full bg-sky-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-sky-800 xl:text-sm"
+              >
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[11px] font-bold text-sky-700">
+                  {getInitials(session.user.name)}
+                </span>
+                <span className="hidden lg:inline">{session.user.name}</span>
+              </button>
+
+              {userMenuOpen && (
+                <div className="absolute right-0 z-50 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+                  <Link
+                    href="/profile"
+                    className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    My Profile
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      void handleLogout();
+                    }}
+                    className="mt-1 block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="ml-auto flex items-center gap-2 md:hidden">
           {!session && (
@@ -270,7 +271,7 @@ export default function Navbar() {
                 >
                   My Profile
                 </Link>
-                {/* Upload Receipt moved to main navbar */}
+                {/* Annual Maintenance is shown only in the main navbar for logged-in users */}
                 <button
                   type="button"
                   onClick={() => void handleLogout()}

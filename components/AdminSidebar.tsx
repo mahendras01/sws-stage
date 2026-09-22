@@ -34,6 +34,8 @@ export default function AdminSidebar() {
         { href: "/admin/add-death", label: "Add Death" },
         { href: "/admin/view-deaths", label: "View Deaths" },
         ...(isGalleryManager ? [{ href: "/admin/gallery", label: "Gallery" }] : []),
+        ...(isCountryLevelAdmin ? [{ href: "/admin/annual-maintenance", label: "Annual Maintenance" }] : []),
+        ...(isCountryLevelAdmin ? [{ href: "/admin/settings", label: "Admin Settings" }] : []),
         ...(isCountryLevelAdmin ? [{ href: "/admin/create-admin", label: "Create Admin" }] : []),
         ...(isCountryLevelAdmin ? [{ href: "/admin/manage-admins", label: "Manage Admins" }] : []),
       ];
