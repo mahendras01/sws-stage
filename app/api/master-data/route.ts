@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getDepartments, getPosts, getDistrictByName } from "@/lib/db";
+import { ensureRequiredRegistrationMasterData, getDepartments, getPosts, getDistrictByName } from "@/lib/db";
 import { UP_DISTRICT_NAMES, resolveDistrictFromPincode } from "@/lib/up-districts";
 
 export const dynamic = "force-dynamic";
@@ -33,9 +33,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const [departmentsResult, postsResult] = await Promise.all([getDepartments(), getPosts()]);
+    const [departmentSeed, departmentsResult, postsResult] = await Promise.all([
+      ensureRequiredRegistrationMasterData(),
+      getDepartments(),
+      getPosts(),
+    ]);
 
-    if (departmentsResult.error || postsResult.error) {
+    if (departmentSeed.error || departmentsResult.error || postsResult.error) {
       return NextResponse.json(
         {
           success: false,
@@ -48,10 +52,31 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const registrationDepartmentName = "Panchayati Raj Vibhag";
+    const registrationPostName = "Safai Karamchari";
+
+    const normalizedDepartments = (departmentsResult.data ?? []).filter((department) => {
+      const value = department.name?.trim().toLowerCase();
+      return value === registrationDepartmentName.toLowerCase() || value?.includes("panchayati") || value?.includes("raj") || value?.includes("vibhag");
+    });
+
+    const normalizedPosts = (postsResult.data ?? []).filter((post) => {
+      const value = post.name?.trim().toLowerCase();
+      return (
+        value === registrationPostName.toLowerCase() ||
+        value?.includes("safai") ||
+        value?.includes("karamchari") ||
+        (departmentSeed.department && post.department_id === departmentSeed.department.id)
+      );
+    });
+
+    const departments = normalizedDepartments.length > 0 ? normalizedDepartments : departmentSeed.department ? [departmentSeed.department] : [];
+    const posts = normalizedPosts.length > 0 ? normalizedPosts : departmentSeed.post ? [departmentSeed.post] : [];
+
     return NextResponse.json({
       success: true,
-      departments: departmentsResult.data ?? [],
-      posts: postsResult.data ?? [],
+      departments,
+      posts,
       districts: UP_DISTRICT_NAMES,
     });
   } catch (error) {

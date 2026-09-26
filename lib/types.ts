@@ -9,7 +9,9 @@ export interface User {
   aadhar_number: string;
   pan_number: string;
   date_of_birth: string | null;
+  membership_expiry_date: string | null;
   ehrms_code: string | null;
+  role_number: string | null;
   gender: string | null;
   father_husband_name: string | null;
   department_id: string | null;
@@ -17,8 +19,10 @@ export interface User {
   nominee_name: string | null;
   nominee_relationship: string | null;
   nominee_mobile_number: string | null;
+  nominee_aadhar_number: string | null;
   nominee2_relationship: string | null;
   nominee2_mobile_number: string | null;
+  reference_name: string | null;
   bank_account_number: string;
   bank_ifsc_code: string;
   bank_holder_name: string;
@@ -84,12 +88,14 @@ export interface AdminDashboardStats {
 export interface SignupInput {
   email: string;
   password: string;
+  confirm_password?: string;
   name: string;
   aadhar_number: string;
   pan_number: string;
   date_of_birth: string;
   ehrms_code: string;
   confirm_ehrms_code: string;
+  role_number?: string;
   gender: string;
   father_husband_name: string;
   department_id: string;
@@ -97,10 +103,13 @@ export interface SignupInput {
   nominee_name: string;
   nominee_relationship: string;
   nominee_mobile_number: string;
+  nominee_aadhar_number: string;
+  reference_name?: string;
   bank_account_number: string;
   bank_ifsc_code: string;
   bank_holder_name: string;
   phone_number: string;
+  blood_group: string;
   house_flat_no: string;
   street_locality: string;
   landmark: string;
@@ -109,6 +118,15 @@ export interface SignupInput {
   state: string;
   pincode: string;
   country: string;
+  permanent_same_as_current?: boolean;
+  permanent_house_flat_no?: string;
+  permanent_street_locality?: string;
+  permanent_landmark?: string;
+  permanent_village_city?: string;
+  permanent_district?: string;
+  permanent_state?: string;
+  permanent_pincode?: string;
+  permanent_country?: string;
   accept_terms: boolean;
 }
 

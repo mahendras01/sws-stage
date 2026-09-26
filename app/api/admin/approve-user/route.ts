@@ -14,6 +14,13 @@ export async function POST(request: NextRequest) {
     const adminContext = getAdminContext(auth.session);
     const adminRole = adminContext.role;
 
+    if (adminRole !== "super_admin") {
+      return NextResponse.json(
+        { success: false, message: "Only the Super Admin can approve or reject new users" },
+        { status: 403 },
+      );
+    }
+
     if (!userId || typeof approved !== "boolean") {
       return NextResponse.json(
         { success: false, message: "userId and approved are required" },
@@ -28,7 +35,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if ((approved && (adminRole === "super_admin" || adminRole === "country_co_admin")) && (!approvalReason || approvalReason.trim().length === 0)) {
+    if (approved && (!approvalReason || approvalReason.trim().length === 0)) {
       return NextResponse.json(
         { success: false, message: "Reason for Admin Approval is required" },
         { status: 400 },
@@ -42,15 +49,6 @@ export async function POST(request: NextRequest) {
 
     if (targetUser.data.status !== "pending") {
       return NextResponse.json({ success: false, message: "User is no longer pending" }, { status: 409 });
-    }
-
-    if (adminRole === "district_admin" || adminRole === "district_co_admin") {
-      if (!adminContext.district || !targetUser.data.district || targetUser.data.district !== adminContext.district) {
-        return NextResponse.json(
-          { success: false, message: "You can only manage users from your assigned district" },
-          { status: 403 },
-        );
-      }
     }
 
     const status = approved ? "approved" : "rejected";
@@ -72,16 +70,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "User is no longer pending" }, { status: 409 });
     }
 
-    const historyReason = approved
-      ? adminRole === "super_admin" || adminRole === "country_co_admin"
-        ? approvalReason?.trim() ?? null
-        : null
-      : rejectionReason?.trim() ?? null;
+    const historyReason = approved ? approvalReason?.trim() ?? null : rejectionReason?.trim() ?? null;
 
     await createApprovalHistory({
       user_id: userId,
       approved_by: auth.session.user.id,
-      approved_by_role: adminRole === "district_admin" || adminRole === "district_co_admin" ? adminRole : "super_admin",
+      approved_by_role: "super_admin",
       approval_status: status,
       approval_reason: historyReason,
     });

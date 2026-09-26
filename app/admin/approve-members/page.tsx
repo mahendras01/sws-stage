@@ -12,6 +12,10 @@ interface PendingUser {
   email: string;
   aadhar_number: string;
   pan_number: string;
+  role_number?: string | null;
+  father_husband_name?: string | null;
+  nominee_aadhar_number?: string | null;
+  reference_name?: string | null;
   bank_account_number?: string | null;
   bank_ifsc_code?: string | null;
   bank_holder_name?: string | null;
@@ -135,14 +139,19 @@ export default function ApproveMembersPage() {
 
   if (loading) return <LoadingSpinner />;
 
+  if (adminRole !== "super_admin") {
+    return (
+      <div className="card mt-8 p-8 text-center">
+        <h1 className="text-2xl font-bold text-gray-900">Pending Approvals</h1>
+        <p className="mt-3 text-neutral">Only the Super Admin can approve or reject new registrations.</p>
+      </div>
+    );
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900">Pending Approvals</h1>
-      <p className="mt-1 text-neutral">
-        {(adminRole === "district_admin" || adminRole === "district_co_admin") && adminDistrict
-          ? `Review new registrations for ${adminDistrict}`
-          : "Review and approve new member registrations"}
-      </p>
+      <p className="mt-1 text-neutral">Review and approve new member registrations</p>
 
       {users.length === 0 ? (
         <div className="card mt-8 py-12 text-center">
@@ -174,6 +183,22 @@ export default function ApproveMembersPage() {
                     <div>
                       <p className="text-xs font-medium uppercase text-neutral">PAN Number</p>
                       <p className="font-medium text-gray-900">{maskValue(user.pan_number, 2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase text-neutral">Role Number</p>
+                      <p className="font-medium text-gray-900">{user.role_number || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase text-neutral">Father&apos;s Name</p>
+                      <p className="font-medium text-gray-900">{user.father_husband_name || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase text-neutral">Nominee Aadhaar</p>
+                      <p className="font-medium text-gray-900">{maskValue(user.nominee_aadhar_number, 4)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase text-neutral">Reference Name</p>
+                      <p className="font-medium text-gray-900">{user.reference_name || "—"}</p>
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase text-neutral">Bank Account</p>

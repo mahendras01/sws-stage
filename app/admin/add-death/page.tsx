@@ -234,14 +234,14 @@ export default function AddDeathPage() {
     return (
       <div className="card py-12 text-center">
         <p className="text-lg font-semibold text-gray-900">Access restricted</p>
-        <p className="mt-2 text-neutral">Only Super Admin can add death records.</p>
+        <p className="mt-2 text-neutral">Only Super Admin can add labharthi records.</p>
       </div>
     );
   }
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900">Add Death Record</h1>
+      <h1 className="text-2xl font-bold text-gray-900">Add Labharthi Records</h1>
       <p className="mt-1 text-neutral">Create a new death record for society members</p>
 
       <form onSubmit={handleSubmit} className="card mt-8 max-w-2xl space-y-4">
@@ -364,7 +364,7 @@ export default function AddDeathPage() {
         </div>
 
         <button type="submit" disabled={submitting} className="btn-primary">
-          {submitting ? "Adding..." : "Add Death Record"}
+          {submitting ? "Adding..." : "Add Labharthi Records"}
         </button>
       </form>
     </div>

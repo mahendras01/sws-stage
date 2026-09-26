@@ -1,6 +1,53 @@
 import type { SignupInput } from "./types";
 
-const PASSWORD_POLICY = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+const PASSWORD_POLICY = /^.{8,}$/;
+
+function toDateFromInput(value: string): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export function getAgeFromDob(dateOfBirth: string): number | null {
+  const dob = toDateFromInput(dateOfBirth);
+  if (!dob) {
+    return null;
+  }
+
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+    age -= 1;
+  }
+
+  return age;
+}
+
+export function calculateMembershipExpiryDate(dateOfBirth: string): string | null {
+  const dob = toDateFromInput(dateOfBirth);
+  if (!dob) {
+    return null;
+  }
+
+  const expiryDate = new Date(dob);
+  expiryDate.setFullYear(expiryDate.getFullYear() + 60);
+  return expiryDate.toISOString().slice(0, 10);
+}
+
+export function isMembershipExpired(dateOfBirth: string, asOfDate = new Date()): boolean {
+  const expiryDate = calculateMembershipExpiryDate(dateOfBirth);
+  if (!expiryDate) {
+    return false;
+  }
+
+  const expiry = new Date(`${expiryDate}T00:00:00`);
+  return asOfDate >= expiry;
+}
 
 export interface ValidationResult {
   valid: boolean;
@@ -14,11 +61,13 @@ export function validateSignup(data: SignupInput): ValidationResult {
     name: data.name?.trim() ?? "",
     email: data.email?.trim() ?? "",
     password: data.password?.trim() ?? "",
+    confirm_password: data.confirm_password?.trim() ?? "",
     aadhar_number: data.aadhar_number?.trim() ?? "",
     pan_number: data.pan_number?.trim() ?? "",
     date_of_birth: data.date_of_birth?.trim() ?? "",
     ehrms_code: data.ehrms_code?.trim() ?? "",
     confirm_ehrms_code: data.confirm_ehrms_code?.trim() ?? "",
+    role_number: data.role_number?.trim() ?? "",
     gender: data.gender?.trim() ?? "",
     father_husband_name: data.father_husband_name?.trim() ?? "",
     department_id: data.department_id?.trim() ?? "",
@@ -26,10 +75,13 @@ export function validateSignup(data: SignupInput): ValidationResult {
     nominee_name: data.nominee_name?.trim() ?? "",
     nominee_relationship: data.nominee_relationship?.trim() ?? "",
     nominee_mobile_number: data.nominee_mobile_number?.trim() ?? "",
+    nominee_aadhar_number: data.nominee_aadhar_number?.trim() ?? "",
+    reference_name: data.reference_name?.trim() ?? "",
     bank_account_number: data.bank_account_number?.trim() ?? "",
     bank_ifsc_code: data.bank_ifsc_code?.trim() ?? "",
     bank_holder_name: data.bank_holder_name?.trim() ?? "",
     phone_number: data.phone_number?.trim() ?? "",
+    blood_group: data.blood_group?.trim() ?? "",
     house_flat_no: data.house_flat_no?.trim() ?? "",
     street_locality: data.street_locality?.trim() ?? "",
     landmark: data.landmark?.trim() ?? "",
@@ -38,6 +90,15 @@ export function validateSignup(data: SignupInput): ValidationResult {
     state: data.state?.trim() ?? "",
     pincode: data.pincode?.trim() ?? "",
     country: data.country?.trim() ?? "",
+    permanent_same_as_current: Boolean(data.permanent_same_as_current),
+    permanent_house_flat_no: data.permanent_house_flat_no?.trim() ?? "",
+    permanent_street_locality: data.permanent_street_locality?.trim() ?? "",
+    permanent_landmark: data.permanent_landmark?.trim() ?? "",
+    permanent_village_city: data.permanent_village_city?.trim() ?? "",
+    permanent_district: data.permanent_district?.trim() ?? "",
+    permanent_state: data.permanent_state?.trim() ?? "",
+    permanent_pincode: data.permanent_pincode?.trim() ?? "",
+    permanent_country: data.permanent_country?.trim() ?? "",
     accept_terms: Boolean(data.accept_terms),
   };
 
@@ -51,7 +112,13 @@ export function validateSignup(data: SignupInput): ValidationResult {
   }
 
   if (!normalized.password || !PASSWORD_POLICY.test(normalized.password)) {
-    errors.password = "Password must be at least 8 characters and include uppercase, lowercase, number, and special character.";
+    errors.password = "Password must be at least 8 characters.";
+  }
+
+  if (!normalized.confirm_password) {
+    errors.confirm_password = "Please confirm your password.";
+  } else if (normalized.password && normalized.confirm_password !== normalized.password) {
+    errors.confirm_password = "Passwords do not match.";
   }
 
   if (!normalized.aadhar_number || !/^\d{12}$/.test(normalized.aadhar_number)) {
@@ -79,6 +146,13 @@ export function validateSignup(data: SignupInput): ValidationResult {
         errors.date_of_birth = "Date of birth cannot be in the future";
       } else if (dob < minimumDate) {
         errors.date_of_birth = "Date of birth must be a realistic value";
+      } else {
+        const age = getAgeFromDob(normalized.date_of_birth);
+        if (age === null) {
+          errors.date_of_birth = "Date of birth is invalid";
+        } else if (age < 18 || age > 55) {
+          errors.date_of_birth = "Registration is allowed only for members aged 18 to 55 years.";
+        }
       }
     }
   }
@@ -90,6 +164,10 @@ export function validateSignup(data: SignupInput): ValidationResult {
     errors.ehrms_code = "EHRMS code is required";
   } else if (ehrmsCode !== confirmEhrmsCode) {
     errors.confirm_ehrms_code = "EHRMS code and confirm EHRMS code do not match";
+  }
+
+  if (normalized.role_number && normalized.role_number.length < 2) {
+    errors.role_number = "Role number must be at least 2 characters if entered";
   }
 
   if (!normalized.gender || !["Male", "Female", "Other"].includes(normalized.gender)) {
@@ -120,8 +198,20 @@ export function validateSignup(data: SignupInput): ValidationResult {
     errors.nominee_mobile_number = "Nominee mobile number must be exactly 10 digits";
   }
 
+  if (!normalized.nominee_aadhar_number || !/^\d{12}$/.test(normalized.nominee_aadhar_number)) {
+    errors.nominee_aadhar_number = "Nominee Aadhaar number must be exactly 12 digits";
+  }
+
+  if (normalized.reference_name && normalized.reference_name.length < 2) {
+    errors.reference_name = "Reference name must be at least 2 characters if entered";
+  }
+
   if (!normalized.phone_number || !/^\d{10}$/.test(normalized.phone_number)) {
     errors.phone_number = "Phone number must be exactly 10 digits";
+  }
+
+  if (!normalized.blood_group || !/^(A|B|AB|O)[+-]$/.test(normalized.blood_group)) {
+    errors.blood_group = "Please select a valid blood group";
   }
 
   if (!normalized.house_flat_no) {
@@ -150,6 +240,36 @@ export function validateSignup(data: SignupInput): ValidationResult {
 
   if (!normalized.country) {
     errors.country = "Country is required";
+  }
+
+  if (!normalized.permanent_same_as_current) {
+    if (!normalized.permanent_house_flat_no) {
+      errors.permanent_house_flat_no = "Permanent house/flat no. is required";
+    }
+
+    if (!normalized.permanent_street_locality) {
+      errors.permanent_street_locality = "Permanent street/locality is required";
+    }
+
+    if (!normalized.permanent_village_city) {
+      errors.permanent_village_city = "Permanent village/city is required";
+    }
+
+    if (!normalized.permanent_district) {
+      errors.permanent_district = "Permanent district is required";
+    }
+
+    if (!normalized.permanent_state) {
+      errors.permanent_state = "Permanent state is required";
+    }
+
+    if (!normalized.permanent_pincode || !/^\d{6}$/.test(normalized.permanent_pincode)) {
+      errors.permanent_pincode = "Permanent PIN code must be exactly 6 digits";
+    }
+
+    if (!normalized.permanent_country) {
+      errors.permanent_country = "Permanent country is required";
+    }
   }
 
   if (!normalized.accept_terms) {

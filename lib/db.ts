@@ -109,19 +109,41 @@ export async function getPostById(postId: string) {
   return { data: data as { id: string; department_id: string; name: string } | null, error };
 }
 
+export async function ensureRequiredRegistrationMasterData() {
+  const departmentName = "Panchayati Raj Vibhag";
+  const postName = "Safai Karamchari";
+
+  const { data: department, error: departmentError } = await supabase
+    .from("departments")
+    .upsert({ name: departmentName }, { onConflict: "name" })
+    .select("id, name")
+    .maybeSingle();
+
+  if (departmentError) {
+    return { department: null, post: null, error: departmentError };
+  }
+
+  if (!department?.id) {
+    return { department: null, post: null, error: new Error("Panchayati Raj Vibhag department could not be created.") };
+  }
+
+  const { data: post, error: postError } = await supabase
+    .from("posts")
+    .upsert({ department_id: department.id, name: postName }, { onConflict: "department_id,name" })
+    .select("id, department_id, name")
+    .maybeSingle();
+
+  return { department, post, error: postError };
+}
+
 export async function createUser(userData: Record<string, unknown>) {
   const { data, error } = await supabase.from("users").insert(userData).select("id, email, status").single();
   return { data, error };
 }
 
 function applyDistrictFilter(query: any, adminRole?: string | null, adminDistrict?: string | null) {
-  if (adminRole === "district_admin" || adminRole === "district_co_admin") {
-    if (adminDistrict) {
-      return query.eq("district", adminDistrict);
-    }
-    return query.eq("district", "__none__");
-  }
-
+  // New registration approvals are handled only by the Super Admin.
+  // District-scoped approval is intentionally no longer used.
   return query;
 }
 
@@ -129,7 +151,7 @@ export async function getPendingUsersForAdmin(adminRole?: string | null, adminDi
   let query = supabase
     .from("users")
     .select(
-      "id, email, name, aadhar_number, pan_number, date_of_birth, ehrms_code, gender, father_husband_name, department_id, post_id, nominee_name, nominee_relationship, nominee_mobile_number, bank_account_number, bank_ifsc_code, bank_holder_name, phone_number, house_flat_no, street_locality, landmark, village_city, district, state, pincode, country, status, created_at",
+      "id, email, name, aadhar_number, pan_number, date_of_birth, ehrms_code, role_number, gender, father_husband_name, department_id, post_id, nominee_name, nominee_relationship, nominee_mobile_number, nominee_aadhar_number, reference_name, bank_account_number, bank_ifsc_code, bank_holder_name, phone_number, house_flat_no, street_locality, landmark, village_city, district, state, pincode, country, status, created_at",
     )
     .eq("status", "pending")
     .order("created_at", { ascending: false });
@@ -273,19 +295,26 @@ export async function resolveNotificationsForRegistration(registrationUserId: st
   return { data, error };
 }
 
-export async function getApprovedUsers(adminRole?: string | null, adminDistrict?: string | null, selectedDistrict?: string | null) {
+export async function getApprovedUsers(adminRole?: string | null, adminDistrict?: string | null, selectedDistrict?: string | null, selectedBlock?: string | null) {
+  const normalizedDistrict = selectedDistrict?.trim();
+  const normalizedBlock = selectedBlock?.trim();
+
   let query = supabase
     .from("users")
     .select(
-      "id, name, email, phone_number, house_flat_no, street_locality, village_city, district, state, pincode, date_of_birth",
+      "id, serial_number, ehrms_code, name, role_number, email, phone_number, house_flat_no, street_locality, village_city, district, state, pincode, date_of_birth",
     )
     .eq("status", "approved")
-    .order("name");
+    .order("serial_number", { ascending: true });
 
-  if (selectedDistrict && selectedDistrict.trim() !== "") {
-    query = query.eq("district", selectedDistrict.trim());
+  if (normalizedDistrict && normalizedDistrict !== "") {
+    query = query.eq("district", normalizedDistrict);
   } else {
     query = applyDistrictFilter(query, adminRole, adminDistrict);
+  }
+
+  if (normalizedBlock && normalizedBlock !== "All") {
+    query = query.ilike("village_city", `%${normalizedBlock}%`);
   }
 
   const { data, error } = await query;
@@ -390,6 +419,80 @@ export async function getAllDeaths(status?: "active" | "closed") {
   return { data: data as Death[] | null, error };
 }
 
+export async function getPublicLabharthiRecords(page = 1, pageSize = 10) {
+  const safePage = Math.max(1, Number(page) || 1);
+  const safePageSize = Math.max(1, Number(pageSize) || 10);
+  const from = (safePage - 1) * safePageSize;
+
+  const listQuery = supabase
+    .from("deaths")
+    .select("id, member_id, member_name, status, created_at")
+    .order("created_at", { ascending: false })
+    .range(from, from + safePageSize - 1);
+
+  const countQuery = supabase.from("deaths").select("id", { count: "exact", head: true });
+
+  const [listResult, countResult] = await Promise.all([listQuery, countQuery]);
+
+  if (listResult.error || countResult.error) {
+    return {
+      data: [],
+      totalCount: 0,
+      totalPages: 0,
+      error: listResult.error || countResult.error,
+    };
+  }
+
+  const deathRows = listResult.data ?? [];
+  const deathIds = deathRows.map((death) => death.id).filter(Boolean);
+  const memberIds = Array.from(new Set((deathRows.map((death) => death.member_id).filter(Boolean))));
+
+  const [usersResult, contributionsResult] = await Promise.all([
+    memberIds.length > 0 ? supabase.from("users").select("id, name, serial_number, ehrms_code, role_number, district, village_city").in("id", memberIds) : Promise.resolve({ data: [], error: null }),
+    deathIds.length > 0 ? supabase.from("contributions").select("death_id, contributor_name, created_at").in("death_id", deathIds).order("created_at", { ascending: false }) : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (usersResult.error || contributionsResult.error) {
+    return {
+      data: [],
+      totalCount: countResult.count ?? 0,
+      totalPages: Math.max(1, Math.ceil((countResult.count ?? 0) / safePageSize)),
+      error: usersResult.error || contributionsResult.error,
+    };
+  }
+
+  const userMap = new Map((usersResult.data ?? []).map((user) => [user.id, user]));
+  const latestContributorByDeath = new Map<string, string>();
+
+  (contributionsResult.data ?? []).forEach((entry) => {
+    const deathId = entry.death_id as string | undefined;
+    if (!deathId || latestContributorByDeath.has(deathId)) return;
+    latestContributorByDeath.set(deathId, (entry.contributor_name as string | undefined) || "-");
+  });
+
+  const records = (deathRows ?? []).map((death) => {
+    const user = death.member_id ? userMap.get(death.member_id) : null;
+    return {
+      id: death.id,
+      serial_number: user?.serial_number ?? null,
+      ehrms_code: user?.ehrms_code ?? null,
+      labharthi_name: death.member_name || user?.name || "-",
+      role_number: user?.role_number ?? null,
+      amount_sender_name: latestContributorByDeath.get(death.id) ?? "-",
+      district: user?.district ?? null,
+      village_city: user?.village_city ?? null,
+      status: death.status,
+    };
+  });
+
+  return {
+    data: records,
+    totalCount: countResult.count ?? 0,
+    totalPages: Math.max(1, Math.ceil((countResult.count ?? 0) / safePageSize)),
+    error: null,
+  };
+}
+
 export async function getDeathById(deathId: string) {
   const { data, error } = await supabase.from("deaths").select("*").eq("id", deathId).single();
   return { data: data as Death | null, error };
@@ -436,7 +539,7 @@ export async function getUserProfileById(userId: string) {
   const { data, error } = await supabase
     .from("users")
     .select(
-      "id, email, name, aadhar_number, pan_number, date_of_birth, ehrms_code, gender, father_husband_name, department_id, post_id, nominee_name, nominee_relationship, nominee_mobile_number, bank_account_number, bank_ifsc_code, bank_holder_name, phone_number, house_flat_no, street_locality, landmark, village_city, district, state, pincode, country, role, status, is_admin, created_at, updated_at",
+      "id, email, name, aadhar_number, pan_number, date_of_birth, ehrms_code, role_number, gender, father_husband_name, department_id, post_id, nominee_name, nominee_relationship, nominee_mobile_number, nominee_aadhar_number, bank_account_number, bank_ifsc_code, bank_holder_name, phone_number, house_flat_no, street_locality, landmark, village_city, district, state, pincode, country, role, status, is_admin, created_at, updated_at",
     )
     .eq("id", userId)
     .single();
@@ -449,7 +552,7 @@ export async function updateUserProfile(userId: string, updates: Record<string, 
     .update(updates)
     .eq("id", userId)
     .select(
-      "id, email, name, aadhar_number, pan_number, date_of_birth, ehrms_code, gender, father_husband_name, department_id, post_id, nominee_name, nominee_relationship, nominee_mobile_number, bank_account_number, bank_ifsc_code, bank_holder_name, phone_number, house_flat_no, street_locality, landmark, village_city, district, state, pincode, country, role, status, is_admin, created_at, updated_at",
+      "id, email, name, aadhar_number, pan_number, date_of_birth, ehrms_code, role_number, gender, father_husband_name, department_id, post_id, nominee_name, nominee_relationship, nominee_mobile_number, nominee_aadhar_number, bank_account_number, bank_ifsc_code, bank_holder_name, phone_number, house_flat_no, street_locality, landmark, village_city, district, state, pincode, country, role, status, is_admin, created_at, updated_at",
     )
     .single();
   return { data: data as Partial<User> | null, error };

@@ -10,8 +10,9 @@ export async function GET(request: NextRequest) {
     if (auth.error) return auth.error;
 
     const district = request.nextUrl.searchParams.get("district")?.trim() || null;
+    const block = request.nextUrl.searchParams.get("block")?.trim() || null;
     const adminContext = getAdminContext(auth.session);
-    const { data, error } = await getApprovedUsers(adminContext.role, adminContext.district, district);
+    const { data, error } = await getApprovedUsers(adminContext.role, adminContext.district, district, block);
 
     if (error) {
       return NextResponse.json(

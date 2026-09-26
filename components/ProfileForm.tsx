@@ -22,6 +22,7 @@ const editableFields = [
   { key: "nominee_name", label: "नॉमिनी का नाम", type: "text" },
   { key: "nominee_relationship", label: "नॉमिनी से संबंध", type: "text" },
   { key: "nominee_mobile_number", label: "नॉमिनी का मोबाइल नंबर", type: "tel" },
+  { key: "nominee_aadhar_number", label: "Nominee Aadhaar Number (नॉमिनी का आधार नंबर)", type: "text" },
   { key: "phone_number", label: "Phone Number", type: "tel" },
   { key: "bank_account_number", label: "Bank Account Number", type: "text" },
   { key: "bank_ifsc_code", label: "Bank IFSC Code", type: "text" },
@@ -43,6 +44,7 @@ type ProfileFormState = {
   pan_number: string;
   date_of_birth: string;
   ehrms_code: string;
+  role_number: string;
   gender: string;
   father_husband_name: string;
   department_id: string;
@@ -50,6 +52,7 @@ type ProfileFormState = {
   nominee_name: string;
   nominee_relationship: string;
   nominee_mobile_number: string;
+  nominee_aadhar_number: string;
   phone_number: string;
   bank_account_number: string;
   bank_ifsc_code: string;
@@ -80,6 +83,7 @@ const initialState: ProfileFormState = {
   pan_number: "",
   date_of_birth: "",
   ehrms_code: "",
+  role_number: "",
   gender: "",
   father_husband_name: "",
   department_id: "",
@@ -87,6 +91,7 @@ const initialState: ProfileFormState = {
   nominee_name: "",
   nominee_relationship: "",
   nominee_mobile_number: "",
+  nominee_aadhar_number: "",
   phone_number: "",
   bank_account_number: "",
   bank_ifsc_code: "",
@@ -149,6 +154,7 @@ export default function ProfileForm() {
           pan_number: profileData.user.pan_number ?? "",
           date_of_birth: profileData.user.date_of_birth ?? "",
           ehrms_code: profileData.user.ehrms_code ?? "",
+          role_number: profileData.user.role_number ?? "",
           gender: profileData.user.gender ?? "",
           father_husband_name: profileData.user.father_husband_name ?? "",
           department_id: profileData.user.department_id ?? "",
@@ -156,6 +162,7 @@ export default function ProfileForm() {
           nominee_name: profileData.user.nominee_name ?? "",
           nominee_relationship: profileData.user.nominee_relationship ?? "",
           nominee_mobile_number: profileData.user.nominee_mobile_number ?? "",
+          nominee_aadhar_number: profileData.user.nominee_aadhar_number ?? "",
           nominee2_relationship: profileData.user.nominee2_relationship ?? "",
           nominee2_mobile_number: profileData.user.nominee2_mobile_number ?? "",
           phone_home: profileData.user.phone_home ?? "",
@@ -215,6 +222,7 @@ export default function ProfileForm() {
         nominee_name: form.nominee_name,
         nominee_relationship: form.nominee_relationship,
         nominee_mobile_number: form.nominee_mobile_number,
+        nominee_aadhar_number: form.nominee_aadhar_number,
         nominee2_relationship: form.nominee2_relationship,
         nominee2_mobile_number: form.nominee2_mobile_number,
         phone_home: form.phone_home,
@@ -296,6 +304,14 @@ export default function ProfileForm() {
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">EHRMS Code</label>
                   <input readOnly value={form.ehrms_code} className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm text-slate-700" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Father&apos;s Name</label>
+                  <input readOnly value={form.father_husband_name || "Not Provided"} className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm text-slate-700" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Role Number</label>
+                  <input readOnly value={form.role_number || "Not Provided"} className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm text-slate-700" />
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
@@ -384,6 +400,10 @@ export default function ProfileForm() {
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">First Nominee Mobile</label>
                   <input value={form.nominee_mobile_number} onChange={(e) => handleChange("nominee_mobile_number", e.target.value)} className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-900" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Nominee Aadhaar Number (नॉमिनी का आधार नंबर)</label>
+                  <input value={form.nominee_aadhar_number} onChange={(e) => handleChange("nominee_aadhar_number", e.target.value)} className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-900" />
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Second Nominee Relation</label>

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDepartments, getPosts, getUserProfileById, updateUserProfile } from "@/lib/db";
 
-const READ_ONLY_FIELDS = ["name", "email", "aadhar_number", "pan_number", "date_of_birth", "ehrms_code"];
+const READ_ONLY_FIELDS = ["name", "email", "aadhar_number", "pan_number", "date_of_birth", "ehrms_code", "role_number"];
 const EDITABLE_FIELDS = [
   "gender",
   "father_husband_name",
@@ -12,6 +12,7 @@ const EDITABLE_FIELDS = [
   "nominee_name",
   "nominee_relationship",
   "nominee_mobile_number",
+  "nominee_aadhar_number",
   "nominee2_relationship",
   "nominee2_mobile_number",
   "phone_home",
@@ -43,6 +44,7 @@ const FIELD_VALIDATORS: Record<string, (value: string) => boolean> = {
   nominee_name: (value) => value.trim().length >= 2,
   nominee_relationship: (value) => value.trim().length >= 2,
   nominee_mobile_number: (value) => /^\d{10}$/.test(value),
+  nominee_aadhar_number: (value) => /^\d{12}$/.test(value),
   nominee2_mobile_number: (value) => /^\d{10}$/.test(value),
   phone_home: (value) => /^\d{10}$/.test(value),
   blood_group: (value) => /^(A|B|AB|O)[+-]$/.test(value),
@@ -159,6 +161,7 @@ export async function GET() {
       pan_number: data.pan_number ?? "",
       date_of_birth: data.date_of_birth ?? "",
       ehrms_code: data.ehrms_code ?? "",
+      role_number: data.role_number ?? "",
       gender: data.gender ?? "",
       father_husband_name: data.father_husband_name ?? "",
       department_id: data.department_id ?? "",
@@ -166,6 +169,7 @@ export async function GET() {
       nominee_name: data.nominee_name ?? "",
       nominee_relationship: data.nominee_relationship ?? "",
       nominee_mobile_number: data.nominee_mobile_number ?? "",
+      nominee_aadhar_number: data.nominee_aadhar_number ?? "",
       nominee2_relationship: data.nominee2_relationship ?? "",
       nominee2_mobile_number: data.nominee2_mobile_number ?? "",
       phone_home: data.phone_home ?? "",
@@ -234,6 +238,7 @@ export async function PATCH(request: NextRequest) {
       pan_number: data.pan_number ?? "",
       date_of_birth: data.date_of_birth ?? "",
       ehrms_code: data.ehrms_code ?? "",
+      role_number: data.role_number ?? "",
       gender: data.gender ?? "",
       father_husband_name: data.father_husband_name ?? "",
       department_id: data.department_id ?? "",
@@ -241,6 +246,7 @@ export async function PATCH(request: NextRequest) {
       nominee_name: data.nominee_name ?? "",
       nominee_relationship: data.nominee_relationship ?? "",
       nominee_mobile_number: data.nominee_mobile_number ?? "",
+      nominee_aadhar_number: data.nominee_aadhar_number ?? "",
       nominee2_relationship: data.nominee2_relationship ?? "",
       nominee2_mobile_number: data.nominee2_mobile_number ?? "",
       phone_home: data.phone_home ?? "",

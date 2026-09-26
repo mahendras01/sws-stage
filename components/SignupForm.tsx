@@ -12,11 +12,13 @@ type SignupFormState = {
   name: string;
   email: string;
   password: string;
+  confirm_password: string;
   aadhar_number: string;
   pan_number: string;
   date_of_birth: string;
   ehrms_code: string;
   confirm_ehrms_code: string;
+  role_number: string;
   gender: string;
   father_husband_name: string;
   department_id: string;
@@ -24,10 +26,13 @@ type SignupFormState = {
   nominee_name: string;
   nominee_relationship: string;
   nominee_mobile_number: string;
+  nominee_aadhar_number: string;
+  reference_name: string;
   bank_account_number: string;
   bank_ifsc_code: string;
   bank_holder_name: string;
   phone_number: string;
+  blood_group: string;
   house_flat_no: string;
   street_locality: string;
   landmark: string;
@@ -36,11 +41,20 @@ type SignupFormState = {
   state: string;
   pincode: string;
   country: string;
+  permanent_same_as_current: boolean;
+  permanent_house_flat_no: string;
+  permanent_street_locality: string;
+  permanent_landmark: string;
+  permanent_village_city: string;
+  permanent_district: string;
+  permanent_state: string;
+  permanent_pincode: string;
+  permanent_country: string;
   accept_terms: boolean;
 };
 
 type FieldConfig = {
-  name: Exclude<keyof SignupFormState, "accept_terms">;
+  name: Exclude<keyof SignupFormState, "accept_terms" | "permanent_same_as_current">;
   label: string;
   type: "text" | "email" | "password" | "tel" | "date" | "select";
   placeholder?: string;
@@ -53,11 +67,13 @@ const initialFormState: SignupFormState = {
   name: "",
   email: "",
   password: "",
+  confirm_password: "",
   aadhar_number: "",
   pan_number: "",
   date_of_birth: "",
   ehrms_code: "",
   confirm_ehrms_code: "",
+  role_number: "",
   gender: "",
   father_husband_name: "",
   department_id: "",
@@ -65,10 +81,13 @@ const initialFormState: SignupFormState = {
   nominee_name: "",
   nominee_relationship: "",
   nominee_mobile_number: "",
+  nominee_aadhar_number: "",
+  reference_name: "",
   bank_account_number: "",
   bank_ifsc_code: "",
   bank_holder_name: "",
   phone_number: "",
+  blood_group: "",
   house_flat_no: "",
   street_locality: "",
   landmark: "",
@@ -77,10 +96,20 @@ const initialFormState: SignupFormState = {
   state: "",
   pincode: "",
   country: "India",
+  permanent_same_as_current: false,
+  permanent_house_flat_no: "",
+  permanent_street_locality: "",
+  permanent_landmark: "",
+  permanent_village_city: "",
+  permanent_district: "",
+  permanent_state: "",
+  permanent_pincode: "",
+  permanent_country: "India",
   accept_terms: false,
 };
 
 const genderOptions = ["Male", "Female", "Other"];
+const bloodGroupOptions = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
 const stateOptions = [
   "Andhra Pradesh",
@@ -177,6 +206,13 @@ export default function SignupForm() {
         district: firstOption.district || prev.district,
         state: firstOption.state || prev.state,
         village_city: options.length === 1 ? firstOption.name : prev.village_city,
+        ...(prev.permanent_same_as_current
+          ? {
+              permanent_district: firstOption.district || prev.permanent_district || prev.district,
+              permanent_state: firstOption.state || prev.permanent_state || prev.state,
+              permanent_village_city: options.length === 1 ? firstOption.name : prev.permanent_village_city || prev.village_city,
+            }
+          : {}),
       }));
 
       setErrors((prev) => ({ ...prev, pincode: "", district: "", state: "", village_city: "" }));
@@ -197,20 +233,72 @@ export default function SignupForm() {
     const { name, type, value } = target;
     const checked = "checked" in target ? target.checked : false;
     const fieldName = name as keyof SignupFormState;
-    const nextValue = type === "checkbox" ? checked : fieldName === "pincode" ? normalizePincode(value) : value;
+    const nextValue = type === "checkbox" ? checked : fieldName === "pincode" || fieldName === "permanent_pincode" ? normalizePincode(value) : value;
 
     setForm((prev) => {
       if (fieldName === "department_id") {
         return { ...prev, department_id: value, post_id: "" };
       }
 
+      if (fieldName === "permanent_same_as_current" && checked) {
+        return {
+          ...prev,
+          permanent_same_as_current: true,
+          permanent_house_flat_no: prev.house_flat_no,
+          permanent_street_locality: prev.street_locality,
+          permanent_landmark: prev.landmark,
+          permanent_village_city: prev.village_city,
+          permanent_district: prev.district,
+          permanent_state: prev.state,
+          permanent_pincode: prev.pincode,
+          permanent_country: prev.country || "India",
+        };
+      }
+
+      if (fieldName === "permanent_same_as_current" && !checked) {
+        return { ...prev, permanent_same_as_current: false };
+      }
+
+      if (fieldName === "house_flat_no" && prev.permanent_same_as_current) {
+        return { ...prev, house_flat_no: value, permanent_house_flat_no: value };
+      }
+
+      if (fieldName === "street_locality" && prev.permanent_same_as_current) {
+        return { ...prev, street_locality: value, permanent_street_locality: value };
+      }
+
+      if (fieldName === "landmark" && prev.permanent_same_as_current) {
+        return { ...prev, landmark: value, permanent_landmark: value };
+      }
+
+      if (fieldName === "village_city" && prev.permanent_same_as_current) {
+        return { ...prev, village_city: value, permanent_village_city: value };
+      }
+
+      if (fieldName === "district" && prev.permanent_same_as_current) {
+        return { ...prev, district: value, permanent_district: value };
+      }
+
+      if (fieldName === "state" && prev.permanent_same_as_current) {
+        return { ...prev, state: value, permanent_state: value };
+      }
+
+      if (fieldName === "pincode" && prev.permanent_same_as_current) {
+        return { ...prev, pincode: value, permanent_pincode: value };
+      }
+
+      if (fieldName === "country" && prev.permanent_same_as_current) {
+        return { ...prev, country: value, permanent_country: value };
+      }
+
       return { ...prev, [fieldName]: nextValue };
     });
     setErrors((prev) => ({ ...prev, [fieldName]: "" }));
 
-    if (fieldName === "pincode" && typeof nextValue === "string") {
-      if (nextValue.length === 6) {
-        void handlePincodeLookup(nextValue);
+    if ((fieldName === "pincode" || fieldName === "permanent_pincode") && typeof nextValue === "string") {
+      const currentPincode = fieldName === "pincode" ? nextValue : form.permanent_pincode;
+      if (currentPincode.length === 6) {
+        void handlePincodeLookup(currentPincode);
       } else {
         setPincodeOptions([]);
         setPincodeStatus("");
@@ -231,14 +319,30 @@ export default function SignupForm() {
     }
 
     try {
-      const normalizedForm = Object.fromEntries(
-        Object.entries(form).map(([key, value]) => [key, typeof value === "string" ? value.trim() : value]),
-      ) as SignupFormState;
+      const normalizedForm: SignupFormState = {
+        ...form,
+        ...Object.fromEntries(
+          Object.entries(form).map(([key, value]) => [key, typeof value === "string" ? value.trim() : value]),
+        ),
+      } as SignupFormState;
+
+      if (normalizedForm.permanent_same_as_current) {
+        normalizedForm.permanent_house_flat_no = normalizedForm.house_flat_no;
+        normalizedForm.permanent_street_locality = normalizedForm.street_locality;
+        normalizedForm.permanent_landmark = normalizedForm.landmark;
+        normalizedForm.permanent_village_city = normalizedForm.village_city;
+        normalizedForm.permanent_district = normalizedForm.district;
+        normalizedForm.permanent_state = normalizedForm.state;
+        normalizedForm.permanent_pincode = normalizedForm.pincode;
+        normalizedForm.permanent_country = normalizedForm.country || "India";
+      }
 
       const formData = new FormData();
       Object.entries(normalizedForm).forEach(([key, value]) => {
-        if (key === "accept_terms") {
-          formData.append(key, value ? "true" : "false");
+        if (key === "accept_terms" || key === "permanent_same_as_current") {
+          if (key === "accept_terms") {
+            formData.append(key, value ? "true" : "false");
+          }
           return;
         }
 
@@ -290,32 +394,40 @@ export default function SignupForm() {
 
   const personalFields: FieldConfig[] = [
     { name: "name", label: "Full Name", type: "text", placeholder: "Enter your full name" },
+    { name: "father_husband_name", label: "Father's Name", type: "text", placeholder: "Enter father's name" },
     { name: "email", label: "Email", type: "email", placeholder: "you@example.com" },
     {
       name: "password",
       label: "Password",
       type: "password",
-      placeholder: "Use 8+ chars with upper, lower, number & symbol",
+      placeholder: "Minimum 8 characters",
     },
+    { name: "confirm_password", label: "Confirm Password", type: "password", placeholder: "Re-enter password" },
     { name: "aadhar_number", label: "Aadhar Number", type: "text", placeholder: "12 digits" },
     { name: "pan_number", label: "PAN Number", type: "text", placeholder: "ABCDE1234F" },
     { name: "date_of_birth", label: "Date Of Birth (As per Aadhar)", type: "date" },
     { name: "phone_number", label: "Phone Number", type: "tel", placeholder: "10 digits" },
+    { name: "blood_group", label: "Blood Group", type: "select" },
   ] as const;
 
   const employmentFields: FieldConfig[] = [
     { name: "ehrms_code", label: "EHRMS कोड", type: "text", placeholder: "Enter EHRMS code" },
     { name: "confirm_ehrms_code", label: "EHRMS कोड की पुष्टि करें", type: "text", placeholder: "Re-enter EHRMS code" },
+    { name: "role_number", label: "Role Number", type: "text", placeholder: "Enter role number if any" },
     { name: "gender", label: "जेंडर", type: "select" },
-    { name: "father_husband_name", label: "पिता/पति का नाम", type: "text", placeholder: "Enter father's or husband's name" },
     { name: "department_id", label: "विभाग (Department)", type: "select" },
     { name: "post_id", label: "पद (Post)", type: "select" },
     { name: "nominee_name", label: "नॉमिनी का नाम", type: "text", placeholder: "Enter nominee name" },
     { name: "nominee_relationship", label: "नॉमिनी से संबंध", type: "text", placeholder: "Enter relationship" },
     { name: "nominee_mobile_number", label: "नॉमिनी का मोबाइल नंबर", type: "tel", placeholder: "10 digits" },
+    { name: "nominee_aadhar_number", label: "Nominee Aadhaar Number (नॉमिनी का आधार नंबर)", type: "text", placeholder: "12 digits", inputMode: "numeric" },
+    { name: "reference_name", label: "Reference Name (Who referred you for registration?)", type: "text", placeholder: "Enter referral name if any" },
+    { name: "pincode", label: "PIN Code", type: "text", placeholder: "6 digits", inputMode: "numeric" },
+    { name: "village_city", label: "Block / Village / City", type: "text", placeholder: "Enter block, village or city" },
+    { name: "district", label: "District", type: "text", placeholder: "Enter district" },
   ] as const;
 
-  const addressFields: FieldConfig[] = [
+  const currentAddressFields: FieldConfig[] = [
     { name: "house_flat_no", label: "House/Flat No.", type: "text", placeholder: "Enter house or flat number", fullWidth: true },
     { name: "street_locality", label: "Street/Locality", type: "text", placeholder: "Enter street or locality", fullWidth: true },
     { name: "landmark", label: "Landmark (Optional)", type: "text", placeholder: "Enter landmark", fullWidth: true },
@@ -324,6 +436,17 @@ export default function SignupForm() {
     { name: "district", label: "District", type: "text", placeholder: "Enter district" },
     { name: "state", label: "State", type: "select", placeholder: "Select state" },
     { name: "country", label: "Country", type: "text", placeholder: "India", readOnly: true },
+  ] as const;
+
+  const permanentAddressFields: FieldConfig[] = [
+    { name: "permanent_house_flat_no", label: "House/Flat No.", type: "text", placeholder: "Enter permanent house or flat number", fullWidth: true },
+    { name: "permanent_street_locality", label: "Street/Locality", type: "text", placeholder: "Enter permanent street or locality", fullWidth: true },
+    { name: "permanent_landmark", label: "Landmark (Optional)", type: "text", placeholder: "Enter permanent landmark", fullWidth: true },
+    { name: "permanent_pincode", label: "PIN Code", type: "text", placeholder: "6 digits", inputMode: "numeric" },
+    { name: "permanent_village_city", label: "Village/City", type: "text", placeholder: "Enter permanent village or city" },
+    { name: "permanent_district", label: "District", type: "text", placeholder: "Enter permanent district" },
+    { name: "permanent_state", label: "State", type: "select", placeholder: "Select permanent state" },
+    { name: "permanent_country", label: "Country", type: "text", placeholder: "India", readOnly: true },
   ] as const;
 
   const renderField = (field: FieldConfig) => {
@@ -335,6 +458,8 @@ export default function SignupForm() {
 
       if (field.name === "gender") {
         selectOptions = genderOptions.map((option) => ({ value: option, label: option }));
+      } else if (field.name === "blood_group") {
+        selectOptions = bloodGroupOptions.map((option) => ({ value: option, label: option }));
       } else if (field.name === "department_id") {
         selectOptions = departments.map((option) => ({ value: option.id, label: option.name }));
       } else if (field.name === "post_id") {
@@ -361,7 +486,7 @@ export default function SignupForm() {
             className={`input-field ${isError ? "border-danger" : ""} ${field.name === "post_id" && (!form.department_id || departmentPosts.length === 0) ? "cursor-not-allowed opacity-60" : ""}`}
           >
             <option value="">
-              {field.name === "gender" ? "Select gender" : field.name === "department_id" ? "Select Department" : field.name === "post_id" ? "Select Post" : isVillageSelect ? "Select village/city" : "Select state"}
+              {field.name === "gender" ? "Select gender" : field.name === "blood_group" ? "Select blood group" : field.name === "department_id" ? "Select Department" : field.name === "post_id" ? "Select Post" : isVillageSelect ? "Select village/city" : "Select state"}
             </option>
             {selectOptions.map((option) => (
               <option key={option.value} value={option.value}>
@@ -390,8 +515,8 @@ export default function SignupForm() {
           readOnly={field.readOnly}
           inputMode={field.inputMode}
         />
-        {field.name === "password" && !isError && (
-          <p className="mt-1 text-[11px] text-slate-500">At least 8 characters, including uppercase, lowercase, number, and symbol.</p>
+        {(field.name === "password" || field.name === "confirm_password") && !isError && (
+          <p className="mt-1 text-[11px] text-slate-500">Minimum 8 characters. Passwords must match.</p>
         )}
         {field.name === "pincode" && pincodeStatus && (
           <p className={`mt-1 text-xs ${errors.pincode ? "text-danger" : "text-slate-500"}`}>{pincodeStatus}</p>
@@ -428,9 +553,29 @@ export default function SignupForm() {
       </div>
 
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Address Details</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Current Address</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          {addressFields.map((field) => renderField(field))}
+          {currentAddressFields.map((field) => renderField(field))}
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <label className="flex items-start gap-3 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              name="permanent_same_as_current"
+              checked={form.permanent_same_as_current}
+              onChange={handleChange}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+            />
+            <span>Permanent address is same as current address</span>
+          </label>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold text-gray-900">Permanent Address</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {permanentAddressFields.map((field) => renderField(field))}
         </div>
       </div>
 

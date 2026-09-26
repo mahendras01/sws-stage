@@ -125,7 +125,7 @@ export default function ViewDeathsPage() {
     <div>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">View Deaths</h1>
+          <h1 className="text-2xl font-bold text-gray-900">View Labharthi Records</h1>
           <p className="mt-1 text-neutral">Manage death records and contributions</p>
         </div>
 

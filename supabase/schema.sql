@@ -59,13 +59,16 @@ CREATE TABLE districts (
 -- Users table
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  serial_number BIGINT UNIQUE,
   email VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   name VARCHAR(255) NOT NULL,
   aadhar_number VARCHAR(12) NOT NULL UNIQUE,
   pan_number VARCHAR(10) NOT NULL UNIQUE,
   date_of_birth DATE,
+  membership_expiry_date DATE,
   ehrms_code VARCHAR(50) UNIQUE,
+  role_number VARCHAR(100),
   gender VARCHAR(20) CHECK (gender IN ('Male', 'Female', 'Other')),
   father_husband_name VARCHAR(255),
   department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
@@ -73,6 +76,8 @@ CREATE TABLE users (
   nominee_name VARCHAR(255),
   nominee_relationship VARCHAR(100),
   nominee_mobile_number VARCHAR(15),
+  nominee_aadhar_number VARCHAR(12),
+  reference_name VARCHAR(255),
   bank_account_number VARCHAR(18) NOT NULL,
   bank_ifsc_code VARCHAR(11) NOT NULL,
   bank_holder_name VARCHAR(255) NOT NULL,
@@ -83,6 +88,15 @@ CREATE TABLE users (
   state VARCHAR(100),
   pincode VARCHAR(6),
   country VARCHAR(100) NOT NULL DEFAULT 'India',
+  permanent_same_as_current BOOLEAN NOT NULL DEFAULT false,
+  permanent_house_flat_no VARCHAR(100),
+  permanent_street_locality VARCHAR(255),
+  permanent_landmark VARCHAR(255),
+  permanent_village_city VARCHAR(255),
+  permanent_district VARCHAR(100),
+  permanent_state VARCHAR(100),
+  permanent_pincode VARCHAR(6),
+  permanent_country VARCHAR(100) NOT NULL DEFAULT 'India',
   status user_status NOT NULL DEFAULT 'pending',
   is_admin BOOLEAN NOT NULL DEFAULT false,
   is_active BOOLEAN NOT NULL DEFAULT true,
@@ -223,6 +237,7 @@ CREATE INDEX idx_users_status ON users(status);
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
 CREATE INDEX idx_users_district ON users(district);
+CREATE INDEX idx_users_serial_number ON users(serial_number);
 CREATE INDEX idx_users_ehrms_code ON users(ehrms_code);
 CREATE INDEX idx_departments_name ON departments(name);
 CREATE INDEX idx_posts_department_id ON posts(department_id);

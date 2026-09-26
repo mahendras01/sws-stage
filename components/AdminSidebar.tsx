@@ -10,6 +10,7 @@ export default function AdminSidebar() {
   const { data: session } = useSession();
   const [pendingCount, setPendingCount] = useState(0);
 
+  const isSuperAdmin = session?.user?.role === "super_admin";
   const isDistrictScopedAdmin = session?.user?.role === "district_admin" || session?.user?.role === "district_co_admin";
   const isCountryLevelAdmin = session?.user?.role === "super_admin" || session?.user?.role === "country_co_admin";
   const isGalleryManager = ["super_admin", "country_co_admin", "district_admin", "district_co_admin"].includes(session?.user?.role ?? "");
@@ -17,22 +18,15 @@ export default function AdminSidebar() {
   const navItems = isDistrictScopedAdmin
     ? [
         { href: "/admin", label: "Dashboard", exact: true },
-        {
-          href: "/admin/approve-members",
-          label: "District Approvals",
-        },
         { href: "/admin/registered-members", label: "Registered Members" },
         ...(isGalleryManager ? [{ href: "/admin/gallery", label: "Gallery" }] : []),
       ]
     : [
         { href: "/admin", label: "Dashboard", exact: true },
-        {
-          href: "/admin/approve-members",
-          label: "Pending Approvals",
-        },
+        ...(isSuperAdmin ? [{ href: "/admin/approve-members", label: "Pending Approvals" }] : []),
         { href: "/admin/registered-members", label: "Registered Members" },
-        { href: "/admin/add-death", label: "Add Death" },
-        { href: "/admin/view-deaths", label: "View Deaths" },
+        { href: "/admin/add-death", label: "Add Labharthi Records" },
+        { href: "/admin/view-deaths", label: "View Labharthi Records" },
         ...(isGalleryManager ? [{ href: "/admin/gallery", label: "Gallery" }] : []),
         ...(isCountryLevelAdmin ? [{ href: "/admin/annual-maintenance", label: "Annual Maintenance" }] : []),
         ...(isCountryLevelAdmin ? [{ href: "/admin/settings", label: "Admin Settings" }] : []),

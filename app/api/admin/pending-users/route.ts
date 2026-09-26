@@ -10,6 +10,14 @@ export async function GET() {
     if (auth.error) return auth.error;
 
     const adminContext = getAdminContext(auth.session);
+
+    if (adminContext.role !== "super_admin") {
+      return NextResponse.json(
+        { success: false, message: "Only the Super Admin can view pending approvals" },
+        { status: 403 },
+      );
+    }
+
     const { data, error } = await getPendingUsersForAdmin(adminContext.role, adminContext.district);
 
     if (error) {

@@ -79,7 +79,7 @@ export default function AdminDashboardPage() {
         {!isDistrictAdmin && (
           <Link href="/admin/add-death" className="card transition-shadow hover:shadow-md">
             <p className="text-sm font-medium text-neutral">Quick Action</p>
-            <p className="mt-2 text-lg font-semibold text-primary">+ Add Death Record</p>
+            <p className="mt-2 text-lg font-semibold text-primary">+ Add Labharthi Records</p>
           </Link>
         )}
 
