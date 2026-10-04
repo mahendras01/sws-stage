@@ -21,7 +21,7 @@ export default function Header() {
           </a>
           <div className="font-medium text-slate-700">
             <span className="font-semibold text-blue-800">पंजीकरण संख्या:</span>{" "}
-            <span className="font-bold text-slate-900">ALL / 0090 / 2026-27</span>
+            <span className="font-bold text-slate-900">LUC/01051/2026-2027</span>
           </div>
         </div>
       </div>

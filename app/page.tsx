@@ -126,50 +126,45 @@ export default function HomePage() {
         </div>
       </section>
 
-      <div className="bg-gray-50 py-10 sm:py-14 lg:py-16">
+      <section className="bg-gray-50 py-10 sm:py-14 lg:py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
-              Self-Welfare Society
-            </h1>
-            <p className="mx-auto mt-4 max-w-2xl text-lg text-neutral">
-              A mutual aid platform where members contribute to help families during emergencies and
-              difficult times. Together, we support each other.
+          <div className="mb-8 text-center">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">
+              Registration Guidance
             </p>
-
-            <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <Link href="/signup" className="btn-primary px-8 py-3 text-base">
-                Join the Society
-              </Link>
-              <Link href="/login" className="btn-secondary px-8 py-3 text-base">
-                Member Login
-              </Link>
-            </div>
+            <h2 className="mt-3 text-2xl font-bold text-gray-900 sm:text-3xl lg:text-4xl">
+              New User Registration – Important Validation Details
+            </h2>
           </div>
 
-          <div className="mt-20 grid gap-8 sm:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {[
-              {
-                title: "Register & Verify",
-                desc: "Sign up with KYC details. Admin verifies and approves your membership.",
-              },
-              {
-                title: "Stay Informed",
-                desc: "View death records and contribution history of fellow society members.",
-              },
-              {
-                title: "Mutual Support",
-                desc: "Contribute via bank transfer to help families in their time of need.",
-              },
+              "Aadhaar number must be exactly 12 digits.",
+              "PAN number must follow the valid PAN format.",
+              "Date of birth is mandatory and must be based on Aadhaar.",
+              "Registration is allowed only for members aged 18 to 55 years.",
+              "Membership expires automatically when the member reaches 60 years of age.",
+              "Password must be at least 8 characters long.",
+              "Phone number and nominee mobile number must be exactly 10 digits.",
+              "Nominee Aadhaar number must be exactly 12 digits.",
+              "PIN code must be exactly 6 digits and match the address details.",
+              "All required address, department, and post selections must be completed before registration.",
             ].map((item) => (
-              <div key={item.title} className="card text-center">
-                <h3 className="text-lg font-semibold text-gray-900">{item.title}</h3>
-                <p className="mt-2 text-sm text-neutral">{item.desc}</p>
+              <div
+                key={item}
+                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md sm:p-5"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                    ✓
+                  </span>
+                  <p className="text-sm leading-6 text-slate-700 sm:text-base">{item}</p>
+                </div>
               </div>
             ))}
           </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
