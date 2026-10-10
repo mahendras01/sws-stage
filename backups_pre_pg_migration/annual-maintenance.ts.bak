@@ -1,4 +1,4 @@
-import { queryRows, toDbError } from "./postgres";
+import { supabase } from "./supabase";
 
 export type AnnualMaintenanceRole = "super_admin" | "country_co_admin";
 
@@ -50,19 +50,15 @@ export function validateAnnualMaintenanceSettings(payload: Partial<AnnualMainten
 }
 
 export async function getAnnualMaintenanceSettings() {
-  try {
-    const rows = await queryRows<AnnualMaintenanceSettings>(
-      `SELECT *
-       FROM annual_maintenance_settings
-       WHERE payment_category = 'ANNUAL_MAINTENANCE'
-       ORDER BY updated_at DESC
-       LIMIT 1`,
-    );
+  const { data, error } = await supabase
+    .from("annual_maintenance_settings")
+    .select("*")
+    .eq("payment_category", "ANNUAL_MAINTENANCE")
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-    return { data: rows[0] ?? null, error: null };
-  } catch (error) {
-    return { data: null, error: toDbError(error) };
-  }
+  return { data: (data as AnnualMaintenanceSettings | null) ?? null, error };
 }
 
 export async function upsertAnnualMaintenanceSettings(userId: string, payload: Partial<AnnualMaintenanceSettings>) {
@@ -90,47 +86,32 @@ export async function upsertAnnualMaintenanceSettings(userId: string, payload: P
     const payloadToSave = withFeeAmount ? nextPayload : basePayload;
 
     if (existing.data) {
-      try {
-        const entries = Object.entries(payloadToSave);
-        const setClause = entries.map(([key], index) => `"${key}" = $${index + 1}`).join(", ");
-        const values = entries.map(([, value]) => value);
-        const rows = await queryRows(
-          `UPDATE annual_maintenance_settings
-           SET ${setClause}
-           WHERE id = $${values.length + 1}
-           RETURNING *`,
-          [...values, existing.data.id],
-        );
-        return { data: rows[0] ?? null, error: null };
-      } catch (error) {
-        return { data: null, error: toDbError(error) };
-      }
+      const { data, error } = await supabase
+        .from("annual_maintenance_settings")
+        .update(payloadToSave)
+        .eq("id", existing.data.id)
+        .select()
+        .single();
+
+      return { data, error };
     }
 
-    try {
-      const insertPayload = {
+    const { data, error } = await supabase
+      .from("annual_maintenance_settings")
+      .insert({
         ...payloadToSave,
         created_by: userId,
-      };
-      const entries = Object.entries(insertPayload);
-      const columns = entries.map(([key]) => `"${key}"`).join(", ");
-      const placeholders = entries.map((_, index) => `$${index + 1}`).join(", ");
-      const values = entries.map(([, value]) => value);
-      const rows = await queryRows(
-        `INSERT INTO annual_maintenance_settings (${columns}) VALUES (${placeholders}) RETURNING *`,
-        values,
-      );
-      return { data: rows[0] ?? null, error: null };
-    } catch (error) {
-      return { data: null, error: toDbError(error) };
-    }
+      })
+      .select()
+      .single();
+
+    return { data, error };
   };
 
   const firstAttempt = await tryUpsert(true);
   if (!firstAttempt.error) return firstAttempt;
 
-  const errorMessage = String(firstAttempt.error.message).toLowerCase();
-  const isMissingFeeColumnError = errorMessage.includes("fee_amount") && (errorMessage.includes("schema cache") || errorMessage.includes("does not exist") || errorMessage.includes("column"));
+  const isMissingFeeColumnError = String(firstAttempt.error.message).toLowerCase().includes("fee_amount") && String(firstAttempt.error.message).toLowerCase().includes("schema cache");
   if (!isMissingFeeColumnError) {
     return firstAttempt;
   }
@@ -147,52 +128,32 @@ export async function createAnnualMaintenancePayment(payload: {
   receiptName?: string | null;
   notes?: string | null;
 }) {
-  try {
-    const rows = await queryRows(
-      `INSERT INTO annual_maintenance_payments (
-        payment_category,
-        user_id,
-        transaction_number,
-        amount,
-        payment_date,
-        payment_receipt_path,
-        payment_receipt_name,
-        notes,
-        status
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING *`,
-      [
-        "ANNUAL_MAINTENANCE",
-        payload.userId,
-        payload.transactionNumber.trim(),
-        payload.amount ?? null,
-        payload.paymentDate ?? null,
-        payload.receiptPath ?? null,
-        payload.receiptName ?? null,
-        payload.notes?.trim() || null,
-        "pending",
-      ],
-    );
+  const { data, error } = await supabase
+    .from("annual_maintenance_payments")
+    .insert({
+      payment_category: "ANNUAL_MAINTENANCE",
+      user_id: payload.userId,
+      transaction_number: payload.transactionNumber.trim(),
+      amount: payload.amount ?? null,
+      payment_date: payload.paymentDate ?? null,
+      payment_receipt_path: payload.receiptPath ?? null,
+      payment_receipt_name: payload.receiptName ?? null,
+      notes: payload.notes?.trim() || null,
+      status: "pending",
+    })
+    .select()
+    .single();
 
-    return { data: rows[0] ?? null, error: null };
-  } catch (error) {
-    return { data: null, error: toDbError(error) };
-  }
+  return { data, error };
 }
 
 export async function getAnnualMaintenancePaymentByUser(userId: string) {
-  try {
-    const data = await queryRows<any>(
-      `SELECT *
-       FROM annual_maintenance_payments
-       WHERE user_id = $1 AND payment_category = 'ANNUAL_MAINTENANCE'
-       ORDER BY created_at DESC`,
-      [userId],
-    );
+  const { data, error } = await supabase
+    .from("annual_maintenance_payments")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("payment_category", "ANNUAL_MAINTENANCE")
+    .order("created_at", { ascending: false });
 
-    return { data, error: null };
-  } catch (error) {
-    return { data: null, error: toDbError(error) };
-  }
+  return { data: data as any[] | null, error };
 }

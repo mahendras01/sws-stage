@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { canManageContacts, parseContactInput } from "@/lib/contact-persons";
-import { queryRows, toDbError } from "@/lib/postgres";
+import { supabase } from "@/lib/supabase";
 import { getRequestMeta, log } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -34,24 +34,12 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     return NextResponse.json({ success: false, message: "Nothing to update" }, { status: 400 });
   }
 
-  let data: any = null;
-  let error: any = null;
-
-  try {
-    const entries = Object.entries(parsed.values);
-    const setClause = entries.map(([key], index) => `"${key}" = $${index + 1}`).join(", ");
-    const values = entries.map(([, value]) => value);
-    const rows = await queryRows(
-      `UPDATE contact_persons
-       SET ${setClause}
-       WHERE id = $${values.length + 1}
-       RETURNING *`,
-      [...values, params.id],
-    );
-    data = rows[0] ?? null;
-  } catch (dbError) {
-    error = toDbError(dbError);
-  }
+  const { data, error } = await supabase
+    .from("contact_persons")
+    .update(parsed.values)
+    .eq("id", params.id)
+    .select()
+    .maybeSingle();
 
   if (error) {
     log.error("admin.contacts.update_failed", { ...getRequestMeta(request), contactId: params.id, error });
@@ -73,15 +61,7 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     return NextResponse.json({ success: false, message: "Invalid contact id" }, { status: 400 });
   }
 
-  let data: any[] = [];
-  let error: any = null;
-
-  try {
-    const rows = await queryRows("DELETE FROM contact_persons WHERE id = $1 RETURNING id", [params.id]);
-    data = rows;
-  } catch (dbError) {
-    error = toDbError(dbError);
-  }
+  const { data, error } = await supabase.from("contact_persons").delete().eq("id", params.id);
   if (error) {
     log.error("admin.contacts.delete_failed", { ...getRequestMeta(request), contactId: params.id, error });
     return NextResponse.json({ success: false, message: "Failed to delete contact" }, { status: 500 });

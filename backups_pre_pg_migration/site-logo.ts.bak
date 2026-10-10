@@ -1,5 +1,5 @@
 import { revalidateTag, unstable_cache } from "next/cache";
-import { queryRows, toDbError } from "./postgres";
+import { supabase } from "./supabase";
 import { log } from "./logger";
 
 export const SITE_LOGO_TAG = "site-logo";
@@ -45,74 +45,59 @@ function toMeta(row: any): LogoMeta {
 }
 
 export async function getLogoMeta(): Promise<{ data: LogoMeta | null; error: any }> {
-  try {
-    const rows = await queryRows<any>(
-      "SELECT file_name, mime_type, size_bytes, updated_at FROM site_logo WHERE id = 1 LIMIT 1",
-    );
-    const data = rows[0] ?? null;
-    return { data: data ? toMeta(data) : null, error: null };
-  } catch (error) {
-    return { data: null, error: toDbError(error) };
-  }
+  const { data, error } = await supabase
+    .from("site_logo")
+    .select("file_name, mime_type, size_bytes, updated_at")
+    .eq("id", 1)
+    .maybeSingle();
+
+  return { data: data ? toMeta(data) : null, error };
 }
 
 export async function getLogoFile() {
-  try {
-    const rows = await queryRows<any>(
-      "SELECT data, mime_type, updated_at FROM site_logo WHERE id = 1 LIMIT 1",
-    );
+  const { data, error } = await supabase
+    .from("site_logo")
+    .select("data, mime_type, updated_at")
+    .eq("id", 1)
+    .maybeSingle();
 
-    const data = rows[0] ?? null;
-    if (!data) {
-      return { file: null, error: null };
-    }
-
-    return {
-      file: {
-        buffer: Buffer.from(data.data),
-        mimeType: data.mime_type as LogoMime,
-        version: new Date(data.updated_at).getTime(),
-      },
-      error: null,
-    };
-  } catch (error) {
-    return { file: null, error: toDbError(error) };
+  if (error || !data) {
+    return { file: null, error };
   }
+
+  return {
+    file: {
+      buffer: Buffer.from(data.data),
+      mimeType: data.mime_type as LogoMime,
+      version: new Date(data.updated_at).getTime(),
+    },
+    error: null,
+  };
 }
 
 export async function saveLogo(buffer: Buffer, mimeType: LogoMime, fileName: string, userId: string | null) {
   const now = new Date().toISOString();
-  try {
-    await queryRows(
-      `INSERT INTO site_logo (id, file_name, mime_type, size_bytes, data, uploaded_by, updated_at)
-       VALUES (1, $1, $2, $3, $4, $5, $6)
-       ON CONFLICT (id)
-       DO UPDATE SET
-         file_name = EXCLUDED.file_name,
-         mime_type = EXCLUDED.mime_type,
-         size_bytes = EXCLUDED.size_bytes,
-         data = EXCLUDED.data,
-         uploaded_by = EXCLUDED.uploaded_by,
-         updated_at = EXCLUDED.updated_at
-       RETURNING id`,
-      [fileName, mimeType, buffer.length, buffer, userId, now],
-    );
+  const { error } = await supabase.from("site_logo").upsert(
+    {
+      id: 1,
+      file_name: fileName,
+      mime_type: mimeType,
+      size_bytes: buffer.length,
+      data: buffer,
+      uploaded_by: userId,
+      updated_at: now,
+    },
+    { onConflict: "id" },
+  ).select("id");
 
-    revalidateTag(SITE_LOGO_TAG);
-    return { error: null };
-  } catch (error) {
-    return { error: toDbError(error) };
-  }
+  if (!error) revalidateTag(SITE_LOGO_TAG);
+  return { error };
 }
 
 export async function deleteLogo() {
-  try {
-    await queryRows("DELETE FROM site_logo WHERE id = 1 RETURNING id");
-    revalidateTag(SITE_LOGO_TAG);
-    return { error: null };
-  } catch (error) {
-    return { error: toDbError(error) };
-  }
+  const { error } = await supabase.from("site_logo").delete().eq("id", 1);
+  if (!error) revalidateTag(SITE_LOGO_TAG);
+  return { error };
 }
 
 const readCachedVersion = unstable_cache(

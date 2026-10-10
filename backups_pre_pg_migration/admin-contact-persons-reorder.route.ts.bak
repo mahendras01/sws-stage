@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { canManageContacts } from "@/lib/contact-persons";
-import { withTransaction } from "@/lib/postgres";
+import { supabase } from "@/lib/supabase";
 import { getRequestMeta, log } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -28,18 +28,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, message: "Invalid order" }, { status: 400 });
   }
 
-  try {
-    await withTransaction(async (client) => {
-      for (let index = 0; index < ids.length; index += 1) {
-        await client.query(
-          "UPDATE contact_persons SET sort_order = $1 WHERE id = $2",
-          [index + 1, ids[index]],
-        );
-      }
-    });
-  } catch (error) {
-    log.error("admin.contacts.reorder_failed", { ...getRequestMeta(request), error });
-    return NextResponse.json({ success: false, message: "Failed to save order" }, { status: 500 });
+  for (let index = 0; index < ids.length; index += 1) {
+    const { error } = await supabase
+      .from("contact_persons")
+      .update({ sort_order: index + 1 })
+      .eq("id", ids[index]);
+
+    if (error) {
+      log.error("admin.contacts.reorder_failed", { ...getRequestMeta(request), error });
+      return NextResponse.json({ success: false, message: "Failed to save order" }, { status: 500 });
+    }
   }
 
   log.info("admin.contacts.reordered", { ...getRequestMeta(request), adminId: auth.session.user.id, count: ids.length });

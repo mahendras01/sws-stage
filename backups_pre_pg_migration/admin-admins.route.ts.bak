@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { requireAdmin, getAdminContext, isDistrictScopedAdminRole, isCountryLevelAdminRole } from "@/lib/auth";
 import { listAdmins, createOrUpdateAdmin, logAdminAssignment, getDistrictByName, upsertDistrict, getDistrictById, getAdminById } from "@/lib/db";
-import { queryRows } from "@/lib/postgres";
+import { supabase } from "@/lib/supabase";
 import { resolveDistrictFromPincode } from "@/lib/up-districts";
 
 export const dynamic = "force-dynamic";
@@ -178,9 +178,8 @@ export async function POST(request: NextRequest) {
       console.error("Failed to create admin assignment audit record. Rolling back newly created admin user:", auditError);
 
       if (!safeId) {
-        try {
-          await queryRows("DELETE FROM users WHERE id = $1", [data.id]);
-        } catch (rollbackError) {
+        const { error: rollbackError } = await supabase.from("users").delete().eq("id", data.id);
+        if (rollbackError) {
           console.error("Rollback failed for admin user after audit write error:", rollbackError);
         }
       }

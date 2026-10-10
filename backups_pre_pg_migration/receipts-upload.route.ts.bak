@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { queryRows } from "@/lib/postgres";
+import { supabase } from "@/lib/supabase";
 import { requireAuth } from "@/lib/auth";
 import { createReceipt, getReceiptByTransactionNumber, updateReceipt, deleteReceipt, getReceiptById } from "@/lib/db";
 import { generateReceiptPdf } from "@/lib/pdf";
@@ -71,18 +71,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: "Transaction Number already exists. Please enter a valid and unused Transaction Number." }, { status: 409 });
     }
 
-    // Generate server-side unique receipt number via native SQL function call.
-    console.log("[receipts.upload] Requesting new receipt number from DB function");
-    let receiptNumber: string;
-    try {
-      const rows = await queryRows<{ receipt_number: string }>(
-        "SELECT receipts_get_next_receipt_number()::text AS receipt_number",
-      );
-      receiptNumber = rows[0]?.receipt_number ?? String(Date.now());
-    } catch (rnError: any) {
-      console.error("[receipts.upload] Failed to obtain receipt number from DB function:", rnError);
-      return NextResponse.json({ success: false, message: "Failed to generate receipt number", details: rnError?.message ?? null }, { status: 500 });
+    // Generate server-side unique receipt number via DB RPC
+    console.log("[receipts.upload] Requesting new receipt number from DB RPC");
+    const { data: rnData, error: rnError } = await supabase.rpc("receipts_get_next_receipt_number");
+    if (rnError) {
+      console.error("[receipts.upload] Failed to obtain receipt number from DB RPC:", rnError);
+      return NextResponse.json({ success: false, message: "Failed to generate receipt number", details: rnError.message ?? null }, { status: 500 });
     }
+    const receiptNumber = (rnData as any) ?? String(Date.now());
     console.log("[receipts.upload] Generated receipt number:", receiptNumber);
 
     // Save file locally under project root 'payment_receipt' directory

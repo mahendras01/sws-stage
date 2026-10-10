@@ -1,7 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import { queryRows } from "./postgres";
+import { supabase } from "./supabase";
 import { log, newRequestId, summarizeUser } from "./logger";
 
 export const authOptions: NextAuthOptions = {
@@ -23,26 +23,19 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Email and password are required");
         }
 
-        let user: any = null;
-        let error: { message: string } | null = null;
-
-        try {
-          const rows = await queryRows<any>(
-            "SELECT id, email, name, password_hash, status, is_admin, role, district, phone_number, ehrms_code FROM users WHERE email = $1 LIMIT 1",
-            [credentials.email.toLowerCase().trim()],
-          );
-          user = rows[0] ?? null;
-        } catch (dbError: any) {
-          error = { message: dbError?.message ?? "Database error" };
-        }
+        const { data: user, error } = await supabase
+          .from("users")
+          .select("id, email, name, password_hash, status, is_admin, role, district, phone_number, ehrms_code")
+          .eq("email", credentials.email.toLowerCase().trim())
+          .single();
 
         if (error || !user) {
           log.warn("auth.login.failed", {
             requestId,
             ip,
-            reason: error ? "db_error" : "user_not_found",
+            reason: error && error.message !== "No rows returned" ? "db_error" : "user_not_found",
             email: attemptedEmail,
-            error: error ?? undefined,
+            error: error && error.message !== "No rows returned" ? error : undefined,
           });
           throw new Error("Invalid email or password");
         }
@@ -102,18 +95,11 @@ export const authOptions: NextAuthOptions = {
         const userId = typeof token.id === "string" ? token.id : undefined;
 
         if (userId) {
-          let freshUser: any = null;
-          let error: any = null;
-
-          try {
-            const rows = await queryRows<any>(
-              "SELECT id, email, name, status, is_admin, role, district FROM users WHERE id = $1 LIMIT 1",
-              [userId],
-            );
-            freshUser = rows[0] ?? null;
-          } catch (dbError) {
-            error = dbError;
-          }
+          const { data: freshUser, error } = await supabase
+            .from("users")
+            .select("id, email, name, status, is_admin, role, district")
+            .eq("id", userId)
+            .single();
 
           if (!error && freshUser) {
             session.user.id = freshUser.id;

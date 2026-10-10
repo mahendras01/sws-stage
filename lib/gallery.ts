@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { queryRows, toDbError } from "./postgres";
 
 export type GalleryType = "achievement" | "photo" | "video";
 
@@ -21,18 +21,29 @@ export function canManageGallery(role?: string | null) {
 }
 
 export async function getGalleryItems(type?: GalleryType, includeInactive = false) {
-  let query = supabase.from("gallery_items").select("*").order("sort_order", { ascending: true }).order("created_at", { ascending: false });
+  try {
+    const values: unknown[] = [];
+    const whereClauses: string[] = [];
 
-  if (type) {
-    query = query.eq("type", type);
+    if (type) {
+      values.push(type);
+      whereClauses.push(`type = $${values.length}`);
+    }
+
+    if (!includeInactive) {
+      whereClauses.push("is_active = TRUE");
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+    const data = await queryRows<GalleryItem>(
+      `SELECT * FROM gallery_items ${whereSql} ORDER BY sort_order ASC, created_at DESC`,
+      values,
+    );
+
+    return { data, error: null };
+  } catch (error) {
+    return { data: [], error: toDbError(error) };
   }
-
-  if (!includeInactive) {
-    query = query.eq("is_active", true);
-  }
-
-  const { data, error } = await query;
-  return { data: (data as GalleryItem[] | null) ?? [], error };
 }
 
 export async function createGalleryItem(payload: Partial<GalleryItem>, userId: string) {
@@ -48,22 +59,26 @@ export async function createGalleryItem(payload: Partial<GalleryItem>, userId: s
     return { data: null, error: new Error("Gallery title is required") };
   }
 
-  const { data, error } = await supabase
-    .from("gallery_items")
-    .insert({
-      type,
-      title,
-      description: payload.description ? String(payload.description).trim() : null,
-      media_url: mediaUrl,
-      external_link: payload.external_link ? String(payload.external_link).trim() : null,
-      sort_order: Number(payload.sort_order ?? 0),
-      is_active: payload.is_active ?? true,
-      created_by: userId,
-    })
-    .select()
-    .single();
-
-  return { data, error };
+  try {
+    const rows = await queryRows(
+      `INSERT INTO gallery_items (type, title, description, media_url, external_link, sort_order, is_active, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [
+        type,
+        title,
+        payload.description ? String(payload.description).trim() : null,
+        mediaUrl,
+        payload.external_link ? String(payload.external_link).trim() : null,
+        Number(payload.sort_order ?? 0),
+        payload.is_active ?? true,
+        userId,
+      ],
+    );
+    return { data: rows[0] ?? null, error: null };
+  } catch (error) {
+    return { data: null, error: toDbError(error) };
+  }
 }
 
 export async function updateGalleryItem(itemId: string, updates: Partial<GalleryItem>) {
@@ -77,11 +92,29 @@ export async function updateGalleryItem(itemId: string, updates: Partial<Gallery
   if (updates.sort_order !== undefined) payload.sort_order = Number(updates.sort_order ?? 0);
   if (updates.is_active !== undefined) payload.is_active = Boolean(updates.is_active);
 
-  const { data, error } = await supabase.from("gallery_items").update(payload).eq("id", itemId).select().single();
-  return { data, error };
+  try {
+    const entries = Object.entries(payload);
+    if (entries.length === 0) {
+      return { data: null, error: new Error("Nothing to update") };
+    }
+
+    const setClause = entries.map(([key], index) => `"${key}" = $${index + 1}`).join(", ");
+    const values = entries.map(([, value]) => value);
+    const rows = await queryRows(
+      `UPDATE gallery_items SET ${setClause} WHERE id = $${values.length + 1} RETURNING *`,
+      [...values, itemId],
+    );
+    return { data: rows[0] ?? null, error: null };
+  } catch (error) {
+    return { data: null, error: toDbError(error) };
+  }
 }
 
 export async function deleteGalleryItem(itemId: string) {
-  const { error } = await supabase.from("gallery_items").delete().eq("id", itemId);
-  return { error };
+  try {
+    await queryRows("DELETE FROM gallery_items WHERE id = $1 RETURNING id", [itemId]);
+    return { error: null };
+  } catch (error) {
+    return { error: toDbError(error) };
+  }
 }

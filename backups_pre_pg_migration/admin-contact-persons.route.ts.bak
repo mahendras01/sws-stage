@@ -7,7 +7,7 @@ import {
   listContactPersons,
   parseContactInput,
 } from "@/lib/contact-persons";
-import { queryRows, toDbError } from "@/lib/postgres";
+import { supabase } from "@/lib/supabase";
 import { getRequestMeta, log } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -60,29 +60,16 @@ export async function POST(request: Request) {
   const { data: existing } = await listContactPersons(true);
   const nextOrder = existing.reduce((max, item) => Math.max(max, item.sort_order ?? 0), 0) + 1;
 
-  let data: any = null;
-  let error: any = null;
-
-  try {
-    const rows = await queryRows(
-      `INSERT INTO contact_persons (name, designation, mobile_number, email, address, is_active, sort_order, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
-      [
-        parsed.values.name,
-        parsed.values.designation ?? null,
-        parsed.values.mobile_number,
-        parsed.values.email ?? null,
-        parsed.values.address ?? null,
-        parsed.values.is_active ?? true,
-        nextOrder,
-        auth.session.user.id,
-      ],
-    );
-    data = rows[0] ?? null;
-  } catch (dbError) {
-    error = toDbError(dbError);
-  }
+  const { data, error } = await supabase
+    .from("contact_persons")
+    .insert({
+      ...parsed.values,
+      is_active: parsed.values.is_active ?? true,
+      sort_order: nextOrder,
+      created_by: auth.session.user.id,
+    })
+    .select()
+    .single();
 
   if (error) {
     log.error("admin.contacts.create_failed", { ...getRequestMeta(request), error });
