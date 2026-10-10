@@ -775,17 +775,6 @@ export async function updateUserProfile(userId: string, updates: Record<string, 
   }
 }
 
-export async function invalidatePasswordResetTokensForUser(userId: string, usedAt: Date) {
-  try {
-    await queryRows(
-      "UPDATE password_reset_tokens SET used_at = $1 WHERE user_id = $2 AND used_at IS NULL RETURNING id",
-      [usedAt.toISOString(), userId],
-    );
-    return { error: null };
-  } catch (error) {
-    return { error: toDbError(error) };
-  }
-}
 
 export async function getSahyogList(opts?: { q?: string; page?: number; pageSize?: number; sahyogType?: string }) {
   const q = opts?.q?.trim() ?? "";
@@ -1023,39 +1012,3 @@ export async function updateUserPassword(userId: string, passwordHash: string) {
   }
 }
 
-export async function createPasswordResetToken(tokenData: Record<string, unknown>) {
-  try {
-    const { columns, placeholders, values } = buildInsert("password_reset_tokens", tokenData);
-    const rows = await queryRows(
-      `INSERT INTO password_reset_tokens (${columns}) VALUES (${placeholders}) RETURNING *`,
-      values,
-    );
-    return { data: rows[0] ?? null, error: null };
-  } catch (error) {
-    return { data: null, error: toDbError(error) };
-  }
-}
-
-export async function getPasswordResetTokenByHash(tokenHash: string) {
-  try {
-    const rows = await queryRows(
-      "SELECT * FROM password_reset_tokens WHERE token_hash = $1 LIMIT 1",
-      [tokenHash],
-    );
-    return { data: rows[0] ?? null, error: null };
-  } catch (error) {
-    return { data: null, error: toDbError(error) };
-  }
-}
-
-export async function markPasswordResetTokenUsed(tokenId: string, usedAt: Date) {
-  try {
-    const rows = await queryRows(
-      "UPDATE password_reset_tokens SET used_at = $1 WHERE id = $2 RETURNING *",
-      [usedAt.toISOString(), tokenId],
-    );
-    return { data: rows[0] ?? null, error: null };
-  } catch (error) {
-    return { data: null, error: toDbError(error) };
-  }
-}

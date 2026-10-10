@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 
 import { requireAuth } from "@/lib/auth";
-import { invalidatePasswordResetTokensForUser, updateUserPassword } from "@/lib/db";
+import { updateUserPassword } from "@/lib/db";
 import { queryRows } from "@/lib/postgres";
 import { getRequestMeta, log } from "@/lib/logger";
 
@@ -43,7 +43,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (auth.error) return auth.error;
 
     const session = auth.session;
-    if (session.user.role !== "super_admin") {
+    const actorRows = await queryRows<{ role: string | null; is_admin: boolean | null }>(
+      "SELECT role, is_admin FROM users WHERE id = $1 LIMIT 1",
+      [session.user.id],
+    );
+    const actor = actorRows[0] ?? null;
+
+    if (!actor?.is_admin || actor.role !== "super_admin") {
       log.warn("admin.user_password_reset.forbidden", { ...meta, adminId: session.user.id, role: session.user.role });
       return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403, headers: NO_STORE });
     }
@@ -122,12 +128,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (updateError) {
       log.error("admin.user_password_reset.failed", { ...meta, adminId: session.user.id, targetId, error: updateError });
       return NextResponse.json({ success: false, message: "Unable to update the password right now." }, { status: 500, headers: NO_STORE });
-    }
-
-    // Any pending self-service reset links must not outlive the admin reset.
-    const { error: invalidateError } = await invalidatePasswordResetTokensForUser(target.id, new Date());
-    if (invalidateError) {
-      log.error("admin.user_password_reset.invalidate_tokens_failed", { ...meta, targetId, error: invalidateError });
     }
 
     // The password itself is never logged.
