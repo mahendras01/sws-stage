@@ -26,6 +26,7 @@ yarn-error.log*
 # env files
 .env
 .env*.local
+.env*.local*.swf
 
 # typescript
 *.tsbuildinfo
@@ -34,3 +35,16 @@ next-env.d.ts
 # Python virtualenvs
 venv/
 .venv/
+
+# database / migration files (kept local, not committed)
+*.sql
+/supabase/
+migrations/
+*migration*.sh
+*.dump
+*.sqlite
+*.sqlite3
+*.db
+
+# markdown documentation
+*.md

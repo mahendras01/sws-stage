@@ -29,8 +29,6 @@ export default withAuth(
           path === "/" ||
           path === "/login" ||
           path === "/signup" ||
-          path === "/forgot-password" ||
-          path === "/reset-password" ||
           path === "/terms" ||
           path === "/privacy-policy" ||
           path.startsWith("/api/auth")

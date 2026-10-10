@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import ResetPasswordModal from "@/components/ResetPasswordModal";
 
 type MemberRow = {
   id: string;
@@ -21,6 +23,9 @@ type MemberRow = {
 };
 
 export default function RegisteredMembersPage() {
+  const { data: session } = useSession();
+  const isSuperAdmin = session?.user?.role === "super_admin";
+  const [passwordTarget, setPasswordTarget] = useState<MemberRow | null>(null);
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [allMembers, setAllMembers] = useState<MemberRow[]>([]);
   const [districts, setDistricts] = useState<string[]>([]);
@@ -191,12 +196,17 @@ export default function RegisteredMembersPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                   Address
                 </th>
+                {isSuperAdmin && (
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
+                    Password
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {members.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-neutral">
+                  <td colSpan={isSuperAdmin ? 8 : 7} className="px-4 py-6 text-center text-sm text-neutral">
                     No registered members found.
                   </td>
                 </tr>
@@ -210,6 +220,17 @@ export default function RegisteredMembersPage() {
                     <td className="px-4 py-3 text-sm text-neutral">{member.email || "-"}</td>
                     <td className="px-4 py-3 text-sm text-neutral">{member.phone_number || "-"}</td>
                     <td className="px-4 py-3 text-sm text-neutral">{formatAddress(member)}</td>
+                    {isSuperAdmin && (
+                      <td className="whitespace-nowrap px-4 py-3 text-sm">
+                        {member.id === session?.user?.id ? (
+                          <span className="text-xs text-gray-400">Your account</span>
+                        ) : (
+                          <button type="button" className="btn-secondary !px-3 !py-1" onClick={() => setPasswordTarget(member)}>
+                            Reset Password
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -217,6 +238,13 @@ export default function RegisteredMembersPage() {
           </table>
         </div>
       </div>
+
+      {isSuperAdmin && passwordTarget && (
+        <ResetPasswordModal
+          user={{ id: passwordTarget.id, name: passwordTarget.name, email: passwordTarget.email }}
+          onClose={() => setPasswordTarget(null)}
+        />
+      )}
     </div>
   );
 }

@@ -13,6 +13,7 @@ interface PendingUser {
   aadhar_number: string;
   pan_number: string;
   role_number?: string | null;
+  ehrms_code?: string | null;
   father_husband_name?: string | null;
   nominee_aadhar_number?: string | null;
   reference_name?: string | null;
@@ -58,12 +59,10 @@ export default function ApproveMembersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const maskValue = (value?: string | null, visibleChars = 4) => {
+  // Only the Super Admin can open this page, so full details are shown for verification before approval.
+  const showValue = (value?: string | null) => {
     if (!value) return "—";
-    const trimmed = value.toString().trim();
-    if (trimmed.length <= visibleChars) return trimmed;
-    const visible = trimmed.slice(-visibleChars);
-    return `${"*".repeat(Math.max(0, trimmed.length - visibleChars))}${visible}`;
+    return value.toString().trim() || "—";
   };
 
   const formatAddress = (user: PendingUser) => {
@@ -178,11 +177,15 @@ export default function ApproveMembersPage() {
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase text-neutral">Aadhar Number</p>
-                      <p className="font-medium text-gray-900">{maskValue(user.aadhar_number, 4)}</p>
+                      <p className="font-medium text-gray-900">{showValue(user.aadhar_number)}</p>
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase text-neutral">PAN Number</p>
-                      <p className="font-medium text-gray-900">{maskValue(user.pan_number, 2)}</p>
+                      <p className="font-medium text-gray-900">{showValue(user.pan_number)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase text-neutral">EHRMS Code</p>
+                      <p className="font-medium text-gray-900">{user.ehrms_code || "—"}</p>
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase text-neutral">Role Number</p>
@@ -194,7 +197,7 @@ export default function ApproveMembersPage() {
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase text-neutral">Nominee Aadhaar</p>
-                      <p className="font-medium text-gray-900">{maskValue(user.nominee_aadhar_number, 4)}</p>
+                      <p className="font-medium text-gray-900">{showValue(user.nominee_aadhar_number)}</p>
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase text-neutral">Reference Name</p>
@@ -202,7 +205,7 @@ export default function ApproveMembersPage() {
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase text-neutral">Bank Account</p>
-                      <p className="font-medium text-gray-900">{maskValue(user.bank_account_number, 4)}</p>
+                      <p className="font-medium text-gray-900">{showValue(user.bank_account_number)}</p>
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase text-neutral">Bank IFSC</p>
@@ -211,6 +214,10 @@ export default function ApproveMembersPage() {
                     <div>
                       <p className="text-xs font-medium uppercase text-neutral">Bank Holder</p>
                       <p className="font-medium text-gray-900">{user.bank_holder_name || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase text-neutral">User ID</p>
+                      <p className="break-all font-medium text-gray-900">{user.id}</p>
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase text-neutral">Registration Date</p>

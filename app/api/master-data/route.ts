@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { ensureRequiredRegistrationMasterData, getDepartments, getPosts, getDistrictByName } from "@/lib/db";
 import { UP_DISTRICT_NAMES, resolveDistrictFromPincode } from "@/lib/up-districts";
+import { getRequestMeta, log } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const meta = getRequestMeta(request);
+
   try {
     const pincode = request.nextUrl.searchParams.get("pincode") ?? "";
 
@@ -23,6 +26,7 @@ export async function GET(request: NextRequest) {
           },
         });
       } catch (error) {
+        log.warn("master_data.pincode_lookup_failed", { ...meta, pincode, error });
         return NextResponse.json(
           {
             success: false,
@@ -40,6 +44,12 @@ export async function GET(request: NextRequest) {
     ]);
 
     if (departmentSeed.error || departmentsResult.error || postsResult.error) {
+      log.error("master_data.lookup_failed", {
+        ...meta,
+        seedError: departmentSeed.error,
+        departmentsError: departmentsResult.error,
+        postsError: postsResult.error,
+      });
       return NextResponse.json(
         {
           success: false,
@@ -80,7 +90,7 @@ export async function GET(request: NextRequest) {
       districts: UP_DISTRICT_NAMES,
     });
   } catch (error) {
-    console.error("Master data lookup failed:", error);
+    log.error("master_data.exception", { ...meta, error });
     return NextResponse.json(
       {
         success: false,

@@ -366,11 +366,11 @@ export async function getAdminDashboardStats(adminRole?: string | null, adminDis
 
   if (isDistrictAdmin && adminDistrict) {
     const memberIds = (deathsRes.data ?? [])
-      .map((death: { member_id: string | null }) => death.member_id)
-      .filter((memberId): memberId is string => Boolean(memberId));
+      .map((death: { member_id?: string | null }) => death.member_id)
+      .filter((memberId: string | null): memberId is string => Boolean(memberId));
     const contributorIds = (contributionsRes.data ?? [])
-      .map((contribution: { contributor_id: string | null }) => contribution.contributor_id)
-      .filter((contributorId): contributorId is string => Boolean(contributorId));
+      .map((contribution: { contributor_id?: string | null }) => contribution.contributor_id)
+      .filter((contributorId: string | null): contributorId is string => Boolean(contributorId));
 
     if (memberIds.length > 0) {
       const { data: districtMembers } = await supabase.from("users").select("id").in("id", memberIds).eq("district", adminDistrict);
@@ -443,9 +443,15 @@ export async function getPublicLabharthiRecords(page = 1, pageSize = 10) {
     };
   }
 
-  const deathRows = listResult.data ?? [];
-  const deathIds = deathRows.map((death) => death.id).filter(Boolean);
-  const memberIds = Array.from(new Set((deathRows.map((death) => death.member_id).filter(Boolean))));
+  const deathRows = (listResult.data ?? []) as Array<{ id: string; member_id?: string | null; member_name?: string | null; status?: string | null }>;
+  const deathIds = deathRows.map((death: { id: string }) => death.id).filter(Boolean);
+  const memberIds = Array.from(
+    new Set(
+      deathRows
+        .map((death: { member_id?: string | null }) => death.member_id)
+        .filter((memberId: string | null | undefined): memberId is string => Boolean(memberId)),
+    ),
+  );
 
   const [usersResult, contributionsResult] = await Promise.all([
     memberIds.length > 0 ? supabase.from("users").select("id, name, serial_number, ehrms_code, role_number, district, village_city").in("id", memberIds) : Promise.resolve({ data: [], error: null }),
@@ -461,17 +467,19 @@ export async function getPublicLabharthiRecords(page = 1, pageSize = 10) {
     };
   }
 
-  const userMap = new Map((usersResult.data ?? []).map((user) => [user.id, user]));
+  const userMap = new Map(
+    ((usersResult.data ?? []) as Array<{ id: string; serial_number?: string | null; ehrms_code?: string | null; role_number?: string | null; district?: string | null; village_city?: string | null; name?: string | null }>).map((user) => [user.id, user]),
+  );
   const latestContributorByDeath = new Map<string, string>();
 
-  (contributionsResult.data ?? []).forEach((entry) => {
+  ((contributionsResult.data ?? []) as Array<{ death_id?: string | null; contributor_name?: string | null }>).forEach((entry) => {
     const deathId = entry.death_id as string | undefined;
     if (!deathId || latestContributorByDeath.has(deathId)) return;
     latestContributorByDeath.set(deathId, (entry.contributor_name as string | undefined) || "-");
   });
 
-  const records = (deathRows ?? []).map((death) => {
-    const user = death.member_id ? userMap.get(death.member_id) : null;
+  const records = deathRows.map((death) => {
+    const user = death.member_id ? (userMap.get(death.member_id) as { serial_number?: string | null; ehrms_code?: string | null; role_number?: string | null; district?: string | null; village_city?: string | null; name?: string | null } | undefined) : null;
     return {
       id: death.id,
       serial_number: user?.serial_number ?? null,
@@ -529,7 +537,7 @@ export async function createContribution(contributionData: Record<string, unknow
 export async function getUserById(userId: string) {
   const { data, error } = await supabase
     .from("users")
-    .select("id, name, email, status, district")
+    .select("id, name, email, status, district, phone_number, ehrms_code, role_number, aadhar_number, pan_number, nominee_aadhar_number, bank_account_number, bank_ifsc_code, bank_holder_name, house_flat_no, street_locality, landmark, village_city, state, pincode, country")
     .eq("id", userId)
     .single();
   return { data, error };
@@ -558,30 +566,6 @@ export async function updateUserProfile(userId: string, updates: Record<string, 
   return { data: data as Partial<User> | null, error };
 }
 
-export async function createPasswordResetToken(userId: string, tokenHash: string, expiresAt: Date) {
-  const { data, error } = await supabase
-    .from("password_reset_tokens")
-    .insert({
-      user_id: userId,
-      token_hash: tokenHash,
-      expires_at: expiresAt.toISOString(),
-    })
-    .select()
-    .single();
-
-  return { data, error };
-}
-
-export async function getPasswordResetTokenByHash(tokenHash: string) {
-  const { data, error } = await supabase
-    .from("password_reset_tokens")
-    .select("id, user_id, expires_at, used_at")
-    .eq("token_hash", tokenHash)
-    .maybeSingle();
-
-  return { data, error };
-}
-
 export async function invalidatePasswordResetTokensForUser(userId: string, usedAt: Date) {
   const { error } = await supabase
     .from("password_reset_tokens")
@@ -604,7 +588,7 @@ export async function getSahyogList(opts?: { q?: string; page?: number; pageSize
       const orExpr = `name.ilike.%${q}%,ehrms_code.ilike.%${q}%,phone_number.ilike.%${q}%`;
       const { data: usersFound } = await supabase.from("users").select("id").or(orExpr).limit(2000);
       userIds = (usersFound ?? []).map((u: any) => u.id).filter(Boolean);
-      if (userIds.length === 0) {
+      if (userIds !== null && userIds.length === 0) {
         return { data: [], count: 0 };
       }
     }
@@ -730,16 +714,6 @@ export async function deleteReceipt(receiptId: string) {
 export async function getReceiptsByUser(userId: string) {
   const { data, error } = await supabase.from("receipts").select("*").eq("user_id", userId).order("created_at", { ascending: false });
   return { data: data as any[] | null, error };
-}
-
-export async function markPasswordResetTokenUsed(tokenId: string, usedAt: Date) {
-  const { data, error } = await supabase
-    .from("password_reset_tokens")
-    .update({ used_at: usedAt.toISOString() })
-    .eq("id", tokenId)
-    .select()
-    .single();
-  return { data, error };
 }
 
 export async function updateUserPassword(userId: string, passwordHash: string) {

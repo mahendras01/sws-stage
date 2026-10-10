@@ -28,6 +28,8 @@ export default function AdminSidebar() {
         { href: "/admin/add-death", label: "Add Labharthi Records" },
         { href: "/admin/view-deaths", label: "View Labharthi Records" },
         ...(isGalleryManager ? [{ href: "/admin/gallery", label: "Gallery" }] : []),
+        ...(isSuperAdmin ? [{ href: "/admin/contact-persons", label: "Contact Page" }] : []),
+        ...(isSuperAdmin ? [{ href: "/admin/logo", label: "Logo Management" }] : []),
         ...(isCountryLevelAdmin ? [{ href: "/admin/annual-maintenance", label: "Annual Maintenance" }] : []),
         ...(isCountryLevelAdmin ? [{ href: "/admin/settings", label: "Admin Settings" }] : []),
         ...(isCountryLevelAdmin ? [{ href: "/admin/create-admin", label: "Create Admin" }] : []),

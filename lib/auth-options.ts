@@ -2,6 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { supabase } from "./supabase";
+import { log, newRequestId, summarizeUser } from "./logger";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -11,33 +12,53 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
+        const requestId = newRequestId();
+        const attemptedEmail = credentials?.email?.toLowerCase().trim();
+        const forwarded = req?.headers?.["x-forwarded-for"];
+        const ip = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(",")[0].trim();
+
         if (!credentials?.email || !credentials?.password) {
+          log.warn("auth.login.failed", { requestId, ip, reason: "missing_credentials", email: attemptedEmail });
           throw new Error("Email and password are required");
         }
 
         const { data: user, error } = await supabase
           .from("users")
-          .select("id, email, name, password_hash, status, is_admin, role, district")
+          .select("id, email, name, password_hash, status, is_admin, role, district, phone_number, ehrms_code")
           .eq("email", credentials.email.toLowerCase().trim())
           .single();
 
         if (error || !user) {
+          log.warn("auth.login.failed", {
+            requestId,
+            ip,
+            reason: error && error.message !== "No rows returned" ? "db_error" : "user_not_found",
+            email: attemptedEmail,
+            error: error && error.message !== "No rows returned" ? error : undefined,
+          });
           throw new Error("Invalid email or password");
         }
 
+        const userSummary = summarizeUser(user);
+
         if (user.status === "pending") {
+          log.warn("auth.login.failed", { requestId, ip, reason: "pending_approval", user: userSummary });
           throw new Error("Your account is pending admin approval");
         }
 
         if (user.status === "rejected") {
+          log.warn("auth.login.failed", { requestId, ip, reason: "account_rejected", user: userSummary });
           throw new Error("Your account has been rejected");
         }
 
         const isValid = await bcrypt.compare(credentials.password, user.password_hash);
         if (!isValid) {
+          log.warn("auth.login.failed", { requestId, ip, reason: "invalid_password", user: userSummary });
           throw new Error("Invalid email or password");
         }
+
+        log.info("auth.login.success", { requestId, ip, user: { ...userSummary, district: user.district } });
 
         return {
           id: user.id,

@@ -18,7 +18,9 @@ type UserData = {
   email?: string | null;
 };
 
-export async function generateReceiptPdf(receipt: ReceiptData, user: UserData, options?: { logoPath?: string }) {
+type PdfOptions = { logoPath?: string; logoBuffer?: Buffer };
+
+export async function generateReceiptPdf(receipt: ReceiptData, user: UserData, options?: PdfOptions) {
   const projectRoot = process.cwd();
   const outDir = path.join(projectRoot, "new_payment_recipt");
   await fs.promises.mkdir(outDir, { recursive: true });
@@ -38,7 +40,7 @@ export async function generateReceiptPdf(receipt: ReceiptData, user: UserData, o
   }
 }
 
-function createPdfAtPath(fullPath: string, receipt: ReceiptData, user: UserData, options?: { logoPath?: string }) {
+function createPdfAtPath(fullPath: string, receipt: ReceiptData, user: UserData, options?: PdfOptions) {
   return new Promise<string>((resolve, reject) => {
     // Ensure pdfkit's AFM data files are available synchronously at runtime
     try {
@@ -96,7 +98,16 @@ function createPdfAtPath(fullPath: string, receipt: ReceiptData, user: UserData,
     doc.lineWidth(2).rect(24, 24, pageWidth - 48, pageHeight - 48).stroke();
 
     // Header: logo (if provided) and organisation name
-    if (options?.logoPath) {
+    let logoDrawn = false;
+    if (options?.logoBuffer) {
+      try {
+        doc.image(options.logoBuffer, 60, 60, { fit: [80, 60] });
+        logoDrawn = true;
+      } catch (e) {
+        // fall back to logoPath below
+      }
+    }
+    if (!logoDrawn && options?.logoPath) {
       try {
         if (fs.existsSync(options.logoPath)) {
           doc.image(options.logoPath, 60, 60, { width: 80 });
@@ -107,7 +118,7 @@ function createPdfAtPath(fullPath: string, receipt: ReceiptData, user: UserData,
     }
 
     doc.fontSize(18).text("Self-Welfare Society", 160, 60, { continued: false });
-    doc.fontSize(10).fillColor("#444").text("Helpline: +91 8987898789", 160, 86);
+    doc.fontSize(10).fillColor("#444").text("Helpline: +91-7080329999", 160, 86);
     doc.moveDown(1);
 
     // Title

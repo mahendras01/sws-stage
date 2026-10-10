@@ -6,13 +6,22 @@ import Navbar from "@/components/Navbar";
 import Providers from "@/components/Providers";
 import FloatingActions from "@/components/FloatingActions";
 import Footer from "@/components/Footer";
+import { getActiveLogoVersion } from "@/lib/site-logo";
 
 const inter = Inter({ subsets: ["latin"] });
 
-export const metadata: Metadata = {
-  title: "Self-Welfare Society",
-  description: "Mutual aid society platform for member welfare during emergencies",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const logoVersion = await getActiveLogoVersion();
+  const iconUrl = logoVersion ? `/api/logo?v=${logoVersion}` : null;
+
+  return {
+    title: "Self-Welfare Society",
+    description: "Mutual aid society platform for member welfare during emergencies",
+    // The version in the URL changes whenever the Super Admin uploads/replaces/deletes the logo,
+    // which makes browsers fetch the new tab icon. With no logo, the default browser icon is used.
+    ...(iconUrl ? { icons: { icon: iconUrl, shortcut: iconUrl, apple: iconUrl } } : {}),
+  };
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

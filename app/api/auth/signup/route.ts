@@ -14,6 +14,7 @@ import {
   createNotificationsBatch,
 } from "@/lib/db";
 import { verifyPincodeMatch } from "@/lib/pincode";
+import { getRequestMeta, log, summarizeUser } from "@/lib/logger";
 import type { SignupInput } from "@/lib/types";
 
 function getFriendlySignupError(error: unknown) {
@@ -21,7 +22,7 @@ function getFriendlySignupError(error: unknown) {
     const message = String((error as { message?: string }).message || "");
 
     if (message.includes("relation \"users\"") || message.includes("does not exist")) {
-      return "Database table is missing. Run the SQL from supabase/schema.sql in Supabase.";
+      return "Database table is missing. Run sql/sws-stage-schema.sql on the PostgreSQL database.";
     }
 
     if (message.includes("duplicate key")) {
@@ -113,11 +114,17 @@ async function validateDepartmentPostRelationship(departmentId: string, postId: 
 }
 
 export async function POST(request: NextRequest) {
+  const meta = getRequestMeta(request);
+  let userSummary: Record<string, unknown> = {};
+
   try {
     const body = await parseSignupBody(request);
+    userSummary = summarizeUser(body);
+    log.info("auth.signup.received", { ...meta, user: userSummary });
 
     const validation = validateSignup(body);
     if (!validation.valid) {
+      log.warn("auth.signup.validation_failed", { ...meta, user: userSummary, errors: validation.errors });
       return NextResponse.json(
         { success: false, message: "Validation failed", errors: validation.errors },
         { status: 400 },
@@ -139,6 +146,7 @@ export async function POST(request: NextRequest) {
 
     const departmentPostValidation = await validateDepartmentPostRelationship(body.department_id, body.post_id);
     if (!departmentPostValidation.valid) {
+      log.warn("auth.signup.rejected", { ...meta, reason: "invalid_department_post", detail: departmentPostValidation.error, departmentId: body.department_id, postId: body.post_id, user: userSummary });
       return NextResponse.json(
         { success: false, message: departmentPostValidation.error, errors: { department_id: departmentPostValidation.error ?? "Invalid department/post selection." } },
         { status: 400 },
@@ -153,6 +161,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!pincodeIsValid) {
+      log.warn("auth.signup.rejected", { ...meta, reason: "pincode_mismatch", user: userSummary });
       return NextResponse.json(
         { success: false, message: "PIN code does not match the provided district, village/city, or state.", errors: { pincode: "PIN code does not match the provided address details." } },
         { status: 400 },
@@ -161,6 +170,7 @@ export async function POST(request: NextRequest) {
 
     const { data: existingEmail } = await getUserByEmail(email);
     if (existingEmail) {
+      log.warn("auth.signup.rejected", { ...meta, reason: "duplicate_email", existingUserId: existingEmail.id, user: userSummary });
       return NextResponse.json(
         { success: false, message: "Email already registered" },
         { status: 409 },
@@ -169,6 +179,7 @@ export async function POST(request: NextRequest) {
 
     const { data: existingAadhar } = await getUserByAadhar(body.aadhar_number);
     if (existingAadhar) {
+      log.warn("auth.signup.rejected", { ...meta, reason: "duplicate_aadhaar", existingUserId: existingAadhar.id, user: userSummary });
       return NextResponse.json(
         { success: false, message: "Aadhar number already registered" },
         { status: 409 },
@@ -177,6 +188,7 @@ export async function POST(request: NextRequest) {
 
     const { data: existingPan } = await getUserByPan(pan);
     if (existingPan) {
+      log.warn("auth.signup.rejected", { ...meta, reason: "duplicate_pan", existingUserId: existingPan.id, user: userSummary });
       return NextResponse.json(
         { success: false, message: "PAN number already registered" },
         { status: 409 },
@@ -185,6 +197,7 @@ export async function POST(request: NextRequest) {
 
     const { data: existingEhrms } = await getUserByEhrmsCode(ehrmsCode);
     if (existingEhrms) {
+      log.warn("auth.signup.rejected", { ...meta, reason: "duplicate_ehrms_code", existingUserId: existingEhrms.id, user: userSummary });
       return NextResponse.json(
         { success: false, message: "EHRMS code already registered" },
         { status: 409 },
@@ -238,7 +251,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (error || !data) {
-      console.error("Signup insert failed:", error);
+      log.error("auth.signup.insert_failed", { ...meta, user: userSummary, error });
       return NextResponse.json(
         { success: false, message: getFriendlySignupError(error) },
         { status: 500 },
@@ -247,13 +260,15 @@ export async function POST(request: NextRequest) {
 
     // Registration approvals are handled only by the Super Admin. No district-level approval notifications are created.
 
+    log.info("auth.signup.success", { ...meta, user: { ...userSummary, userId: data.id, status: data.status } });
+
     return NextResponse.json({
       success: true,
       message: "Registration successful. Waiting for admin approval.",
       user: { id: data.id, email: data.email, status: data.status },
     });
   } catch (error) {
-    console.error("Signup route error:", error);
+    log.error("auth.signup.exception", { ...meta, user: userSummary, error });
     return NextResponse.json(
       { success: false, message: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 },

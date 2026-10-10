@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getSession } from "@/lib/auth";
 import { getDepartments, getPosts, getUserProfileById, updateUserProfile } from "@/lib/db";
+import { getRequestMeta, log, summarizeUser } from "@/lib/logger";
 
 const READ_ONLY_FIELDS = ["name", "email", "aadhar_number", "pan_number", "date_of_birth", "ehrms_code", "role_number"];
 const EDITABLE_FIELDS = [
@@ -137,19 +138,24 @@ function validateUpdates(updates: Record<string, unknown>) {
   return errors;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const meta = getRequestMeta(request);
   const sessionResult = await getSession();
   const session = sessionResult?.user ? sessionResult : null;
 
   if (!session?.user?.id) {
+    log.warn("profile.get.unauthorized", meta);
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
   const { data, error } = await getUserProfileById(session.user.id);
 
   if (error || !data) {
+    log.error("profile.get.failed", { ...meta, userId: session.user.id, email: session.user.email, error });
     return NextResponse.json({ success: false, message: "Profile not found" }, { status: 404 });
   }
+
+  log.info("profile.get.success", { ...meta, user: summarizeUser(data) });
 
   return NextResponse.json({
     success: true,
@@ -184,24 +190,33 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  const meta = getRequestMeta(request);
   const sessionResult = await getSession();
   const session = sessionResult?.user ? sessionResult : null;
 
   if (!session?.user?.id) {
+    log.warn("profile.update.unauthorized", meta);
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
+
+  const actor = { userId: session.user.id, email: session.user.email, name: session.user.name };
 
   let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
+    log.warn("profile.update.rejected", { ...meta, user: actor, reason: "invalid_body" });
     return NextResponse.json({ success: false, message: "Invalid request body" }, { status: 400 });
   }
 
   const updates = getSafeProfilePayload(body);
   if (Object.keys(updates).length === 0) {
+    log.warn("profile.update.rejected", { ...meta, user: actor, reason: "no_valid_fields" });
     return NextResponse.json({ success: false, message: "No valid profile fields were provided for update" }, { status: 400 });
   }
+
+  const updateSummary = { ...meta, user: { ...summarizeUser(updates), ...actor }, updatedFields: Object.keys(updates) };
+  log.info("profile.update.received", updateSummary);
 
   for (const field of READ_ONLY_FIELDS) {
     if (field in body) {
@@ -211,21 +226,25 @@ export async function PATCH(request: NextRequest) {
 
   const validationErrors = validateUpdates(updates);
   if (Object.keys(validationErrors).length > 0) {
+    log.warn("profile.update.validation_failed", { ...updateSummary, errors: validationErrors });
     return NextResponse.json({ success: false, message: "Validation failed", errors: validationErrors }, { status: 400 });
   }
 
   if (updates.department_id && updates.post_id) {
     const departmentPostValidation = await validateDepartmentPostSelection(String(updates.department_id), String(updates.post_id));
     if (!departmentPostValidation.valid) {
+      log.warn("profile.update.rejected", { ...updateSummary, reason: "invalid_department_post", detail: departmentPostValidation.message });
       return NextResponse.json({ success: false, message: departmentPostValidation.message || "Invalid department/post selection." }, { status: 400 });
     }
   }
 
   const { data, error } = await updateUserProfile(session.user.id, updates);
   if (error || !data) {
-    console.error("Profile update failed:", error);
+    log.error("profile.update.failed", { ...updateSummary, error });
     return NextResponse.json({ success: false, message: "Unable to update profile" }, { status: 500 });
   }
+
+  log.info("profile.update.success", { ...updateSummary, user: { ...summarizeUser(data), ...actor } });
 
   return NextResponse.json({
     success: true,

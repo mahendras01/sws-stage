@@ -7,6 +7,10 @@ const nextConfig = {
       { protocol: "http", hostname: "**" },
     ],
   },
+  async rewrites() {
+    // Browsers that ask for /favicon.ico directly get the managed logo (404 if none is set).
+    return [{ source: "/favicon.ico", destination: "/api/logo" }];
+  },
 };
 
 export default nextConfig;

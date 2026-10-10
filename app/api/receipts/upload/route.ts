@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { requireAuth } from "@/lib/auth";
 import { createReceipt, getReceiptByTransactionNumber, updateReceipt, deleteReceipt, getReceiptById } from "@/lib/db";
 import { generateReceiptPdf } from "@/lib/pdf";
+import { getLogoFile } from "@/lib/site-logo";
 import fs from "fs";
 import path from "path";
 
@@ -158,7 +159,10 @@ export async function POST(request: Request) {
       };
 
       const logoPath = path.join(process.cwd(), "public", "images", "Self_Welfare_Society_Registration.jpg");
-      const pdfRelPath = await generateReceiptPdf(data as any, user as any, { logoPath });
+      // PDFKit only supports PNG/JPEG; WebP logos (or no logo) fall back to the default image.
+      const { file: managedLogo } = await getLogoFile();
+      const logoBuffer = managedLogo && managedLogo.mimeType !== "image/webp" ? managedLogo.buffer : undefined;
+      const pdfRelPath = await generateReceiptPdf(data as any, user as any, { logoPath, logoBuffer });
 
       // update receipt record with generated PDF path in `receipt_file_path`
       const { data: updated, error: updErr } = await updateReceipt(String((data as any).id), { receipt_file_path: pdfRelPath });
