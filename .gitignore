@@ -48,3 +48,9 @@ migrations/
 
 # markdown documentation
 *.md
+
+# User-generated SWS receipts and uploaded/generated assets
+/payment_receipt/
+/new_payment_recipt/
+/public/annual-maintenance/1790049468042-test-bar-code.png
+/public/annual-maintenance/1790050318984-test-bar-code.png
