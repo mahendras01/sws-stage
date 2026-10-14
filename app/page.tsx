@@ -50,8 +50,8 @@ export default function HomePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-6 flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Community Support</p>
-              <h2 className="mt-2 text-3xl font-bold text-gray-900">View Labharthi Records</h2>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">सामुदायिक सहायता</p>
+              <h2 className="mt-2 text-3xl font-bold text-gray-900">लाभार्थी रिकॉर्ड देखें</h2>
             </div>
           </div>
 
@@ -130,25 +130,23 @@ export default function HomePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 text-center">
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">
-              Registration Guidance
+              पंजीकरण मार्गदर्शन
             </p>
             <h2 className="mt-3 text-2xl font-bold text-gray-900 sm:text-3xl lg:text-4xl">
-              New User Registration – Important Validation Details
+              नया उपयोगकर्ता पंजीकरण – महत्वपूर्ण सत्यापन विवरण
             </h2>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {[
-              "Aadhaar number must be exactly 12 digits.",
-              "PAN number must follow the valid PAN format.",
-              "Date of birth is mandatory and must be based on Aadhaar.",
-              "Registration is allowed only for members aged 18 to 55 years.",
-              "Membership expires automatically when the member reaches 60 years of age.",
-              "Password must be at least 8 characters long.",
-              "Phone number and nominee mobile number must be exactly 10 digits.",
-              "Nominee Aadhaar number must be exactly 12 digits.",
-              "PIN code must be exactly 6 digits and match the address details.",
-              "All required address, department, and post selections must be completed before registration.",
+              "जन्म तिथि अनिवार्य है और सही दर्ज की जानी चाहिए।",
+              "पंजीकरण केवल 18 से 55 वर्ष की आयु के सदस्यों के लिए है।",
+              "सदस्य की आयु 60 वर्ष पहुँचने पर सदस्यता अपने आप समाप्त हो जाती है।",
+              "पासवर्ड कम से कम 8 अक्षरों का होना चाहिए।",
+              "फोन नंबर और नॉमिनी मोबाइल नंबर 10 अंकों के होने चाहिए।",
+              "यदि नॉमिनी का आधार नंबर दर्ज किया जाए, तो वह 12 अंकों का होना चाहिए।",
+              "पिन कोड 6 अंकों का होना चाहिए और पता विवरण से मेल खाना चाहिए।",
+              "पंजीकरण से पहले सभी आवश्यक पता, विभाग और पद का चयन पूरा करना आवश्यक है।",
             ].map((item) => (
               <div
                 key={item}

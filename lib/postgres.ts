@@ -1,19 +1,17 @@
 import { Pool, type PoolClient, type QueryResultRow } from "pg";
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.DATABASE_URL ?? null;
 
-if (!connectionString) {
-  throw new Error("Missing DATABASE_URL environment variable for the PostgreSQL database.");
-}
+export const pool = connectionString
+  ? new Pool({
+      connectionString,
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    })
+  : null;
 
-export const pool = new Pool({
-  connectionString,
-  max: 10,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
-});
-
-export type DbClient = Pool | PoolClient;
+export type DbClient = Pool | PoolClient | null;
 
 export function toDbError(error: unknown): { message: string; code: string } {
   if (error && typeof error === "object") {
@@ -32,11 +30,19 @@ export async function queryRows<T extends QueryResultRow>(
   params: unknown[] = [],
   client: DbClient = pool,
 ): Promise<T[]> {
+  if (!client) {
+    throw new Error("Missing DATABASE_URL environment variable for the PostgreSQL database.");
+  }
+
   const result = await client.query<T>(sql, params);
   return result.rows;
 }
 
 export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  if (!pool) {
+    throw new Error("Missing DATABASE_URL environment variable for the PostgreSQL database.");
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

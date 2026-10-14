@@ -113,7 +113,7 @@ export default function Navbar() {
                 onClick={() => setUploadOpen((prev) => !prev)}
                 className="rounded-full px-3 py-2 text-xs font-semibold text-white transition-all duration-200 hover:bg-sky-700 hover:text-white xl:text-sm"
               >
-                Upload Receipt
+                UPLOAD RECEIPT
               </button>
 
               {uploadOpen && (

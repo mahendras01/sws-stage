@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { calculateMembershipExpiryDate, validateSignup } from "@/lib/validation";
@@ -22,17 +23,25 @@ function getFriendlySignupError(error: unknown) {
     const message = String((error as { message?: string }).message || "");
 
     if (message.includes("relation \"users\"") || message.includes("does not exist")) {
-      return "Database table is missing. Run sql/sws-stage-schema.sql on the PostgreSQL database.";
+      return "डेटाबेस टेबल मौजूद नहीं है। PostgreSQL डेटाबेस में sql/sws-stage-schema.sql चलाएँ।";
     }
 
     if (message.includes("duplicate key")) {
-      return "A user with the same email, Aadhaar, PAN, or EHRMS code already exists.";
+      return "उसी ईमेल, आधार, PAN, या EHRMS कोड वाला उपयोगकर्ता पहले से मौजूद है।";
     }
 
     return message;
   }
 
-  return "Failed to create account";
+  return "अकाउंट बनाना विफल रहा";
+}
+
+function generatePlaceholderAadhaar() {
+  return randomInt(0, 10 ** 12).toString().padStart(12, "0");
+}
+
+function generatePlaceholderPan() {
+  return `TMP${randomInt(0, 10 ** 6).toString().padStart(6, "0")}A`;
 }
 
 async function parseSignupBody(request: NextRequest): Promise<SignupInput> {
@@ -132,8 +141,12 @@ export async function POST(request: NextRequest) {
     }
 
     const email = body.email.toLowerCase().trim();
-    const pan = body.pan_number.toUpperCase();
+    const pan = body.pan_number.trim().toUpperCase();
     const ehrmsCode = body.ehrms_code.trim().toUpperCase();
+    const aadhar = body.aadhar_number.trim();
+    const safeAadharNumber = aadhar || generatePlaceholderAadhaar();
+    const safePanNumber = pan || generatePlaceholderPan();
+    const safeNomineeAadhaarNumber = body.nominee_aadhar_number.trim() || null;
     const ifsc = body.bank_ifsc_code.toUpperCase();
     const houseFlatNo = body.house_flat_no.trim();
     const streetLocality = body.street_locality.trim();
@@ -148,7 +161,7 @@ export async function POST(request: NextRequest) {
     if (!departmentPostValidation.valid) {
       log.warn("auth.signup.rejected", { ...meta, reason: "invalid_department_post", detail: departmentPostValidation.error, departmentId: body.department_id, postId: body.post_id, user: userSummary });
       return NextResponse.json(
-        { success: false, message: departmentPostValidation.error, errors: { department_id: departmentPostValidation.error ?? "Invalid department/post selection." } },
+        { success: false, message: departmentPostValidation.error, errors: { department_id: departmentPostValidation.error ?? "विभाग/पद का चयन अमान्य है।" } },
         { status: 400 },
       );
     }
@@ -163,7 +176,7 @@ export async function POST(request: NextRequest) {
     if (!pincodeIsValid) {
       log.warn("auth.signup.rejected", { ...meta, reason: "pincode_mismatch", user: userSummary });
       return NextResponse.json(
-        { success: false, message: "PIN code does not match the provided district, village/city, or state.", errors: { pincode: "PIN code does not match the provided address details." } },
+        { success: false, message: "पिन कोड, प्रदान किए गए जिले, गाँव/शहर या राज्य से मेल नहीं खाता।", errors: { pincode: "पिन कोड, दिए गए पता विवरण से मेल नहीं खाता।" } },
         { status: 400 },
       );
     }
@@ -172,34 +185,38 @@ export async function POST(request: NextRequest) {
     if (existingEmail) {
       log.warn("auth.signup.rejected", { ...meta, reason: "duplicate_email", existingUserId: existingEmail.id, user: userSummary });
       return NextResponse.json(
-        { success: false, message: "Email already registered" },
+        { success: false, message: "ईमेल पहले से पंजीकृत है" },
         { status: 409 },
       );
     }
 
-    const { data: existingAadhar } = await getUserByAadhar(body.aadhar_number);
-    if (existingAadhar) {
-      log.warn("auth.signup.rejected", { ...meta, reason: "duplicate_aadhaar", existingUserId: existingAadhar.id, user: userSummary });
-      return NextResponse.json(
-        { success: false, message: "Aadhar number already registered" },
-        { status: 409 },
-      );
+    if (aadhar) {
+      const { data: existingAadhar } = await getUserByAadhar(aadhar);
+      if (existingAadhar) {
+        log.warn("auth.signup.rejected", { ...meta, reason: "duplicate_aadhaar", existingUserId: existingAadhar.id, user: userSummary });
+        return NextResponse.json(
+          { success: false, message: "आधार संख्या पहले से पंजीकृत है" },
+          { status: 409 },
+        );
+      }
     }
 
-    const { data: existingPan } = await getUserByPan(pan);
-    if (existingPan) {
-      log.warn("auth.signup.rejected", { ...meta, reason: "duplicate_pan", existingUserId: existingPan.id, user: userSummary });
-      return NextResponse.json(
-        { success: false, message: "PAN number already registered" },
-        { status: 409 },
-      );
+    if (pan) {
+      const { data: existingPan } = await getUserByPan(pan);
+      if (existingPan) {
+        log.warn("auth.signup.rejected", { ...meta, reason: "duplicate_pan", existingUserId: existingPan.id, user: userSummary });
+        return NextResponse.json(
+          { success: false, message: "PAN संख्या पहले से पंजीकृत है" },
+          { status: 409 },
+        );
+      }
     }
 
     const { data: existingEhrms } = await getUserByEhrmsCode(ehrmsCode);
     if (existingEhrms) {
       log.warn("auth.signup.rejected", { ...meta, reason: "duplicate_ehrms_code", existingUserId: existingEhrms.id, user: userSummary });
       return NextResponse.json(
-        { success: false, message: "EHRMS code already registered" },
+        { success: false, message: "EHRMS कोड पहले से पंजीकृत है" },
         { status: 409 },
       );
     }
@@ -210,8 +227,8 @@ export async function POST(request: NextRequest) {
       email,
       password_hash: passwordHash,
       name: body.name.trim(),
-      aadhar_number: body.aadhar_number,
-      pan_number: pan,
+      aadhar_number: safeAadharNumber,
+      pan_number: safePanNumber,
       date_of_birth: body.date_of_birth || null,
       membership_expiry_date: calculateMembershipExpiryDate(body.date_of_birth) || null,
       ehrms_code: ehrmsCode,
@@ -223,7 +240,7 @@ export async function POST(request: NextRequest) {
       nominee_name: body.nominee_name.trim(),
       nominee_relationship: body.nominee_relationship.trim(),
       nominee_mobile_number: body.nominee_mobile_number.trim(),
-      nominee_aadhar_number: body.nominee_aadhar_number.trim(),
+      nominee_aadhar_number: safeNomineeAadhaarNumber,
       reference_name: body.reference_name?.trim() || null,
       bank_account_number: body.bank_account_number || "",
       bank_ifsc_code: ifsc || "",
@@ -264,7 +281,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Registration successful. Waiting for admin approval.",
+      message: "पंजीकरण सफल हुआ। व्यवस्थापक की मंजूरी का इंतजार है।",
       user: { id: data.id, email: data.email, status: data.status },
     });
   } catch (error) {

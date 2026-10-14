@@ -1,48 +1,58 @@
 import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 type ReceiptData = {
   receipt_number?: string;
   transaction_number?: string;
   transaction_id?: string;
+  transaction_utr?: string;
+  payment_provider?: string | null;
   amount?: number | string;
   created_at?: string;
   id?: string;
   user_id?: string;
+  transaction_date?: string | null;
+  sahyog_type?: string | null;
+  paid_by_name?: string | null;
+  paid_by_district?: string | null;
+  paid_to_name?: string | null;
+  paid_to_district?: string | null;
 };
 
 type UserData = {
   name?: string | null;
   phone_number?: string | null;
   email?: string | null;
+  address?: string | null;
+  paid_by_name?: string | null;
+  paid_by_district?: string | null;
+  paid_to_name?: string | null;
+  paid_to_district?: string | null;
 };
 
 type PdfOptions = { logoPath?: string; logoBuffer?: Buffer };
 
+function asDisplay(value: unknown) {
+  if (value === null || value === undefined) return "-";
+  const text = String(value).trim();
+  return text || "-";
+}
+
 export async function generateReceiptPdf(receipt: ReceiptData, user: UserData, options?: PdfOptions) {
-  const projectRoot = process.cwd();
-  const outDir = path.join(projectRoot, "new_payment_recipt");
+  const outDir = path.join(process.cwd(), "private", "receipts", "pdf");
   await fs.promises.mkdir(outDir, { recursive: true });
 
-  const receiptNumber = String(receipt.receipt_number ?? receipt.transaction_number ?? receipt.transaction_id ?? Date.now());
-  const fileName = `SWS-REC-${receiptNumber}.pdf`;
-  const outPath = path.join(outDir, fileName);
+  const seed = String(receipt.receipt_number ?? receipt.transaction_number ?? receipt.transaction_id ?? receipt.id ?? crypto.randomUUID());
+  const safeName = `SWS-REC-${seed.replace(/[^a-zA-Z0-9._-]/g, "-")}.pdf`;
+  const outPath = path.join(outDir, safeName);
 
-  // ensure we don't overwrite existing file
-  try {
-    await fs.promises.access(outPath);
-    // file exists — avoid overwrite by appending timestamp
-    const altName = `SWS-REC-${receiptNumber}-${Date.now()}.pdf`;
-    return await createPdfAtPath(path.join(outDir, altName), receipt, user, options);
-  } catch (e) {
-    return await createPdfAtPath(outPath, receipt, user, options);
-  }
+  return createPdfAtPath(outPath, receipt, user, options);
 }
 
 function createPdfAtPath(fullPath: string, receipt: ReceiptData, user: UserData, options?: PdfOptions) {
   return new Promise<string>((resolve, reject) => {
-    // Ensure pdfkit's AFM data files are available synchronously at runtime
     try {
       const pdfkitMain = require.resolve("pdfkit");
       const candidateDataDirs = [
@@ -57,102 +67,87 @@ function createPdfAtPath(fullPath: string, receipt: ReceiptData, user: UserData,
         for (const cand of candidateDataDirs) {
           try {
             if (!fs.existsSync(cand)) continue;
-            const files = fs.readdirSync(cand);
-            for (const f of files) {
-              const src = path.join(cand, f);
-              const dst = path.join(targetDataDir, f);
-              try {
-                if (!fs.existsSync(dst)) {
-                  fs.copyFileSync(src, dst);
-                }
-              } catch (copyErr) {
-                // ignore individual copy errors
+            for (const file of fs.readdirSync(cand)) {
+              const src = path.join(cand, file);
+              const dst = path.join(targetDataDir, file);
+              if (!fs.existsSync(dst)) {
+                fs.copyFileSync(src, dst);
               }
             }
-          } catch (e) {
-            // ignore candidate dir issues
+          } catch {
+            // ignore
           }
         }
-      } catch (e) {
-        // ignore overall copy errors
+      } catch {
+        // ignore
       }
-    } catch (e) {
-      // ignore if require.resolve fails
+    } catch {
+      // ignore
     }
 
     const doc = new PDFDocument({ size: "A4", margin: 48 });
     const stream = fs.createWriteStream(fullPath, { flags: "wx" });
 
-    stream.on("error", (err) => {
-      reject(err);
-    });
-
+    stream.on("error", (err) => reject(err));
     stream.on("finish", () => resolve(path.relative(process.cwd(), fullPath)));
-
     doc.pipe(stream);
 
-    // Border
     const pageWidth = doc.page.width;
     const pageHeight = doc.page.height;
     doc.save();
     doc.lineWidth(2).rect(24, 24, pageWidth - 48, pageHeight - 48).stroke();
 
-    // Header: logo (if provided) and organisation name
     let logoDrawn = false;
     if (options?.logoBuffer) {
       try {
         doc.image(options.logoBuffer, 60, 60, { fit: [80, 60] });
         logoDrawn = true;
-      } catch (e) {
-        // fall back to logoPath below
+      } catch {
+        // ignore
       }
     }
-    if (!logoDrawn && options?.logoPath) {
+    if (!logoDrawn && options?.logoPath && fs.existsSync(options.logoPath)) {
       try {
-        if (fs.existsSync(options.logoPath)) {
-          doc.image(options.logoPath, 60, 60, { width: 80 });
-        }
-      } catch (e) {
-        // ignore logo errors
+        doc.image(options.logoPath, 60, 60, { width: 80 });
+      } catch {
+        // ignore
       }
     }
 
-    doc.fontSize(18).text("Self-Welfare Society", 160, 60, { continued: false });
+    doc.fontSize(18).text("Self-Welfare Society", 160, 60);
     doc.fontSize(10).fillColor("#444").text("Helpline: +91-7080329999", 160, 86);
-    doc.moveDown(1);
-
-    // Title
     doc.fontSize(14).fillColor("#000").text("Acknowledgement Receipt", { align: "center" });
-    doc.moveDown(1);
+    doc.moveDown(0.5);
 
-    // Key fields in two-column layout
     const leftX = 60;
-    const rightX = 320;
-    let y = 150;
+    let y = 160;
+    const labelWidth = 150;
+    const valueX = leftX + labelWidth + 10;
+    const printValue = (label: string, value: unknown) => {
+      doc.fontSize(10).fillColor("#333").text(`${label}:`, leftX, y);
+      doc.fontSize(9.5).fillColor("#111").text(asDisplay(value), valueX, y, { width: 380, lineGap: 2 });
+      y += 20;
+    };
 
-    function labelVal(label: string, val?: any, x = leftX) {
-      doc.fontSize(10).fillColor("#333").text(label + ":", x, y);
-      doc.fontSize(10).fillColor("#000").text(String(val ?? "-"), x + 120, y);
-      y += 18;
-    }
-
-    labelVal("Receipt Number", receipt.receipt_number ?? receipt.transaction_id ?? "-");
-    labelVal("Transaction Number", receipt.transaction_number ?? "-");
-    labelVal("Transaction ID", receipt.transaction_id ?? "-");
-    labelVal("Amount", receipt.amount ? String(receipt.amount) : "-");
-    labelVal("Payment Date", receipt.created_at ? String(receipt.created_at) : "-");
-    labelVal("Paid By", user.name ?? "-");
-    labelVal("Mobile", user.phone_number ?? "-");
-    labelVal("Email", user.email ?? "-");
+    printValue("Receipt Number", receipt.receipt_number ?? receipt.transaction_number ?? receipt.transaction_id ?? "-");
+    printValue("Transaction ID", receipt.transaction_id ?? "-");
+    printValue("Transaction Number", receipt.transaction_number ?? "-");
+    printValue("UTR / Bank Ref", receipt.transaction_utr ?? "-");
+    printValue("Payment Provider", receipt.payment_provider ?? "-");
+    printValue("Amount", `₹ ${asDisplay(receipt.amount).replace(/^₹\s*/, "")}`);
+    printValue("Transaction Date", receipt.transaction_date ?? (receipt.created_at ? new Date(receipt.created_at).toISOString().slice(0, 10) : "-"));
+    printValue("Issue Date", receipt.created_at ? new Date(receipt.created_at).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+    printValue("Paid By", receipt.paid_by_name ?? user.paid_by_name ?? user.name ?? "-");
+    printValue("Paid To", receipt.paid_to_name ?? user.paid_to_name ?? "-");
+    printValue("District", receipt.paid_by_district ?? user.paid_by_district ?? "-");
+    printValue("Member Name", user.name ?? "-");
+    printValue("Mobile", user.phone_number ?? "-");
+    printValue("Email", user.email ?? "-");
+    printValue("Address", user.address ?? "-");
+    printValue("Sahyog Type", receipt.sahyog_type ?? "General");
 
     doc.moveDown(2);
-
-    // Sahyog Type placeholder (if stored in receipt record)
-    doc.fontSize(11).text("Sahyog Type: " + ( (receipt as any).sahyog_type ?? "-" ), leftX, y + 6);
-
-    // Acknowledgement message at bottom
-    doc.fontSize(12).fillColor("#0a6b4a").text("Thank You For Your Contribution", 0, pageHeight - 140, { align: "center" });
-
+    doc.fontSize(11).fillColor("#0b563d").text("Thank You For Your Contribution", 0, pageHeight - 110, { align: "center" });
     doc.end();
   });
 }

@@ -44,6 +44,7 @@ export interface User {
   pincode: string | null;
   country: string | null;
   status: UserStatus;
+  is_active?: boolean | null;
   is_admin: boolean;
   rejected_reason: string | null;
   created_at: string;

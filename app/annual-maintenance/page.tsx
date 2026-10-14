@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 type Settings = {
   fee_amount?: number | string | null;
@@ -17,6 +18,7 @@ type Settings = {
 };
 
 export default function AnnualMaintenancePage() {
+  const router = useRouter();
   const { data: session, status } = useSession();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [form, setForm] = useState({
@@ -48,6 +50,21 @@ export default function AnnualMaintenancePage() {
       return;
     }
 
+    try {
+      const duplicateCheck = await fetch(`/api/annual-maintenance/check-duplicate?transactionNumber=${encodeURIComponent(form.transactionNumber)}`);
+      const duplicateJson = await duplicateCheck.json();
+      if (!duplicateCheck.ok || duplicateJson?.duplicate) {
+        setMessage({
+          type: "error",
+          text: duplicateJson?.message || "This UTR/Transaction Number has already been submitted. Please check the number or upload a different payment receipt.",
+        });
+        return;
+      }
+    } catch {
+      setMessage({ type: "error", text: "Unable to validate transaction number. Please try again." });
+      return;
+    }
+
     const fd = new FormData();
     fd.append("transactionNumber", form.transactionNumber);
     fd.append("amount", form.amount);
@@ -71,6 +88,8 @@ export default function AnnualMaintenancePage() {
 
       setMessage({ type: "success", text: "Annual maintenance payment submitted successfully." });
       setForm({ transactionNumber: "", amount: "", paymentDate: "", notes: "", receipt: null });
+      router.refresh();
+      router.push("/view-annual-maintenance-receipt");
     } catch (error) {
       setMessage({
         type: "error",
@@ -160,7 +179,7 @@ export default function AnnualMaintenancePage() {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-semibold text-slate-800">Submit Payment</h2>
+          <h2 className="text-2xl font-semibold text-slate-800">Upload Annual Maintenance Payment Receipt</h2>
 
           {!session ? (
             <div className="mt-6 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
@@ -237,7 +256,7 @@ export default function AnnualMaintenancePage() {
                 disabled={submitting}
                 className="w-full rounded-lg bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {submitting ? "Submitting..." : "Submit Annual Maintenance Payment"}
+                {submitting ? "Submitting..." : "Submit Annual Maintenance Payment Receipt"}
               </button>
             </form>
           )}

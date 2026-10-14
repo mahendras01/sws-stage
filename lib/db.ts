@@ -126,8 +126,13 @@ export async function upsertDistrict(districtName: string, stateName = "Uttar Pr
 }
 
 export async function getUserByAadhar(aadhar: string) {
+  const normalizedAadhar = aadhar?.trim();
+  if (!normalizedAadhar) {
+    return { data: null, error: null };
+  }
+
   try {
-    const rows = await queryRows<{ id: string }>("SELECT id FROM users WHERE aadhar_number = $1", [aadhar]);
+    const rows = await queryRows<{ id: string }>("SELECT id FROM users WHERE aadhar_number = $1", [normalizedAadhar]);
     if (rows.length === 0) {
       return { data: null, error: missingSingleRowError("User") };
     }
@@ -138,8 +143,13 @@ export async function getUserByAadhar(aadhar: string) {
 }
 
 export async function getUserByPan(pan: string) {
+  const normalizedPan = pan?.trim();
+  if (!normalizedPan) {
+    return { data: null, error: null };
+  }
+
   try {
-    const rows = await queryRows<{ id: string }>("SELECT id FROM users WHERE pan_number = $1", [pan.toUpperCase()]);
+    const rows = await queryRows<{ id: string }>("SELECT id FROM users WHERE pan_number = $1", [normalizedPan.toUpperCase()]);
     if (rows.length === 0) {
       return { data: null, error: missingSingleRowError("User") };
     }
@@ -723,13 +733,71 @@ export async function createContribution(contributionData: Record<string, unknow
 export async function getUserById(userId: string) {
   try {
     const rows = await queryRows(
-      "SELECT id, name, email, status, district, phone_number, ehrms_code, role_number, aadhar_number, pan_number, nominee_aadhar_number, bank_account_number, bank_ifsc_code, bank_holder_name, house_flat_no, street_locality, landmark, village_city, state, pincode, country FROM users WHERE id = $1",
+      "SELECT id, name, email, status, is_active, district, phone_number, ehrms_code, role_number, aadhar_number, pan_number, nominee_aadhar_number, bank_account_number, bank_ifsc_code, bank_holder_name, house_flat_no, street_locality, landmark, village_city, state, pincode, country FROM users WHERE id = $1",
       [userId],
     );
     if (rows.length === 0) {
       return { data: null, error: missingSingleRowError("User") };
     }
     return { data: rows[0], error: null };
+  } catch (error) {
+    return { data: null, error: toDbError(error) };
+  }
+}
+
+export function hydrateReceiptRecord(receipt: any) {
+  if (!receipt) return receipt;
+
+  return {
+    ...receipt,
+    paid_by_name: receipt.paid_by_name ?? receipt.uploader_name ?? null,
+    paid_by_district: receipt.paid_by_district ?? receipt.uploader_district ?? null,
+    paid_to_name: receipt.paid_to_name ?? receipt.paid_to_name_display ?? receipt.recipient_name ?? null,
+    paid_to_district: receipt.paid_to_district ?? receipt.recipient_district ?? null,
+    district: receipt.paid_by_district ?? receipt.uploader_district ?? null,
+  };
+}
+
+export async function getReceiptRecipientFilterOptions(options?: { district?: string | null; location?: string | null }) {
+  const district = options?.district?.trim() ?? "";
+  const location = options?.location?.trim() ?? "";
+  const whereClauses: string[] = ["status = 'approved'", "is_active = TRUE"];
+  const values: unknown[] = [];
+
+  if (district) {
+    values.push(district);
+    whereClauses.push(`district = $${values.length}`);
+  }
+
+  if (location) {
+    values.push(location);
+    whereClauses.push(`village_city = $${values.length}`);
+  }
+
+  try {
+    const rows = await queryRows<{ id: string; name: string; district: string | null; village_city: string | null }>(
+      `SELECT id, name, district, village_city
+       FROM users
+       WHERE ${whereClauses.join(" AND ")}
+       ORDER BY name ASC`,
+      values,
+    );
+
+    const districtSet = Array.from(new Set(rows.map((row) => row.district).filter((value): value is string => Boolean(value)))).sort();
+    const locationSet = Array.from(new Set(rows.filter((row) => !district || row.district === district).map((row) => row.village_city).filter((value): value is string => Boolean(value)))).sort();
+
+    const users = rows
+      .filter((row) => (!district || row.district === district) && (!location || row.village_city === location))
+      .map((row) => ({ id: row.id, name: row.name, district: row.district, village_city: row.village_city }));
+
+    return {
+      data: {
+        districts: districtSet,
+        locations: locationSet,
+        users,
+      },
+      error: null,
+    };
   } catch (error) {
     return { data: null, error: toDbError(error) };
   }
@@ -944,13 +1012,44 @@ export async function getReceiptByTransactionNumber(transactionNumber: string) {
   }
 }
 
+export async function getReceiptByTransactionReference(reference: string) {
+  const normalized = reference?.trim();
+  if (!normalized) {
+    return { data: null, error: null };
+  }
+
+  try {
+    const rows = await queryRows(
+      "SELECT * FROM receipts WHERE transaction_number = $1 OR transaction_id = $1 OR (transaction_utr IS NOT NULL AND transaction_utr = $1) LIMIT 1",
+      [normalized],
+    );
+    return { data: rows[0] ?? null, error: null };
+  } catch (error) {
+    return { data: null, error: toDbError(error) };
+  }
+}
+
 export async function getReceiptById(receiptId: string) {
   try {
-    const rows = await queryRows("SELECT * FROM receipts WHERE id = $1", [receiptId]);
+    const rows = await queryRows(
+      `SELECT r.*,
+              uploader.name AS uploader_name,
+              uploader.district AS uploader_district,
+              COALESCE(r.paid_by_name, uploader.name) AS paid_by_name,
+              COALESCE(r.paid_by_district, uploader.district) AS paid_by_district,
+              recipient.name AS recipient_name,
+              COALESCE(r.paid_to_name, recipient.name) AS paid_to_name_display,
+              recipient.district AS recipient_district
+       FROM receipts r
+       LEFT JOIN users uploader ON uploader.id = r.user_id
+       LEFT JOIN users recipient ON recipient.id = r.paid_to_user_id
+       WHERE r.id = $1`,
+      [receiptId],
+    );
     if (rows.length === 0) {
       return { data: null, error: missingSingleRowError("Receipt") };
     }
-    return { data: rows[0], error: null };
+    return { data: hydrateReceiptRecord(rows[0]), error: null };
   } catch (error) {
     return { data: null, error: toDbError(error) };
   }
@@ -986,10 +1085,22 @@ export async function deleteReceipt(receiptId: string) {
 export async function getReceiptsByUser(userId: string) {
   try {
     const data = await queryRows<any>(
-      "SELECT * FROM receipts WHERE user_id = $1 ORDER BY created_at DESC",
+      `SELECT r.*,
+              uploader.name AS uploader_name,
+              uploader.district AS uploader_district,
+              COALESCE(r.paid_by_name, uploader.name) AS paid_by_name,
+              COALESCE(r.paid_by_district, uploader.district) AS paid_by_district,
+              recipient.name AS recipient_name,
+              COALESCE(r.paid_to_name, recipient.name) AS paid_to_name_display,
+              recipient.district AS recipient_district
+       FROM receipts r
+       LEFT JOIN users uploader ON uploader.id = r.user_id
+       LEFT JOIN users recipient ON recipient.id = r.paid_to_user_id
+       WHERE r.user_id = $1
+       ORDER BY r.created_at DESC`,
       [userId],
     );
-    return { data, error: null };
+    return { data: data.map((receipt) => hydrateReceiptRecord(receipt)), error: null };
   } catch (error) {
     return { data: null, error: toDbError(error) };
   }

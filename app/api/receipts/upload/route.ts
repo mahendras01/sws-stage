@@ -1,207 +1,266 @@
 import { NextResponse } from "next/server";
 import { queryRows } from "@/lib/postgres";
 import { requireAuth } from "@/lib/auth";
-import { createReceipt, getReceiptByTransactionNumber, updateReceipt, deleteReceipt, getReceiptById } from "@/lib/db";
+import { createReceipt, getReceiptById, getReceiptByTransactionReference, getUserProfileById, getReceiptRecipientFilterOptions, getUserById, updateReceipt, deleteReceipt } from "@/lib/db";
 import { generateReceiptPdf } from "@/lib/pdf";
 import { getLogoFile } from "@/lib/site-logo";
-import fs from "fs";
-import path from "path";
+import { buildProfileAddress, extractPaymentDocumentData, normalizeReceiptReference, validateReceiptFile } from "@/lib/receipt-extraction";
+import fs from "node:fs/promises";
+import crypto from "node:crypto";
+import path from "node:path";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+async function generateReceiptNumber() {
+  try {
+    const rows = await queryRows<{ receipt_number: string }>("SELECT receipts_get_next_receipt_number()::text AS receipt_number");
+    if (rows[0]?.receipt_number) {
+      return rows[0].receipt_number;
+    }
+  } catch {
+    // Fall through to the compatibility fallback below for older schemas.
+  }
+
+  try {
+    const rows = await queryRows<{ nextval: string }>("SELECT nextval('receipts_txn_seq') AS nextval");
+    const nextValue = rows[0]?.nextval ?? String(Date.now());
+    const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    return `SWS-REC-${dateStamp}-${String(nextValue).padStart(6, "0")}`;
+  } catch {
+    const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    return `SWS-REC-${dateStamp}-${String(Date.now()).slice(-6).padStart(6, "0")}`;
+  }
+}
 
 export async function POST(request: Request) {
   try {
-    console.log("[receipts.upload] Request received");
     const auth = await requireAuth();
-    if (auth.error) {
-      console.log("[receipts.upload] Auth check failed");
-      return auth.error;
-    }
+    if (auth.error) return auth.error;
+
     const session = auth.session;
-    console.log("[receipts.upload] Authenticated user:", session?.user?.id);
-
     const form = await request.formData();
-    console.log("[receipts.upload] FormData parsed. Keys:", Array.from(form.keys()));
-    const file = form.get("file") as any;
+    const file = form.get("file");
+    if (!(file instanceof File)) {
+      return NextResponse.json({ success: false, message: "Receipt file is required." }, { status: 400 });
+    }
+
     const transactionNumber = String(form.get("transactionNumber") ?? "").trim();
+    const transactionId = String(form.get("transactionId") ?? "").trim();
+    const utr = String(form.get("utr") ?? "").trim();
+    const paymentProvider = String(form.get("paymentProvider") ?? "").trim();
+    const transactionDate = String(form.get("transactionDate") ?? "").trim();
+    const transactionTime = String(form.get("transactionTime") ?? "").trim();
+    const payerName = String(form.get("payerName") ?? "").trim();
+    const payeeName = String(form.get("payeeName") ?? "").trim();
     const amountRaw = form.get("amount");
-    const amount = amountRaw ? Number(amountRaw) : null;
-    const sahyogType = String(form.get("sahyogType") ?? "").trim();
+    const amount = amountRaw !== null && amountRaw !== undefined ? Number(String(amountRaw).trim()) : NaN;
+    const sahyogType = String(form.get("sahyogType") ?? "").trim() || "General";
+    const district = String(form.get("district") ?? "").trim();
+    const location = String(form.get("location") ?? "").trim();
+    const paidToUserId = String(form.get("paidToUserId") ?? "").trim();
 
-    if (!transactionNumber) {
-      console.log("[receipts.upload] Missing transactionNumber");
-      return NextResponse.json({ success: false, message: "Transaction Number is required" }, { status: 400 });
+    const fileValidation = await validateReceiptFile(file, file.name || "receipt");
+    if (!fileValidation.valid) {
+      return NextResponse.json({ success: false, message: fileValidation.error || "Unsupported receipt file." }, { status: 400 });
     }
 
-    if (!file || typeof file.size !== "number") {
-      console.log("[receipts.upload] Missing or invalid file field");
-      return NextResponse.json({ success: false, message: "Receipt file is required" }, { status: 400 });
+    const extracted = await extractPaymentDocumentData(file);
+    const resolvedAmount = Number.isFinite(amount) && amount > 0 ? amount : extracted.amount ?? null;
+    const resolvedTransactionId = normalizeReceiptReference(transactionId, extracted.transactionId) || null;
+    const resolvedUtr = normalizeReceiptReference(utr, extracted.utr) || null;
+    const resolvedReference = normalizeReceiptReference(transactionNumber, resolvedTransactionId, resolvedUtr) || null;
+    const hasAmountConflict = extracted.amount !== null && Number.isFinite(resolvedAmount) && Math.abs(Number(extracted.amount) - Number(resolvedAmount)) > 0.01;
+    const hasTransactionConflict = Boolean(extracted.transactionId && resolvedTransactionId && extracted.transactionId !== resolvedTransactionId);
+    const needsManualReview = hasAmountConflict || hasTransactionConflict;
+    const resolvedProvider = paymentProvider || extracted.paymentProvider || null;
+    const resolvedDate = transactionDate || extracted.transactionDate || null;
+    const resolvedTime = transactionTime || extracted.transactionTime || null;
+    const resolvedPayerName = payerName || extracted.payerName || null;
+    const resolvedPayeeName = payeeName || extracted.payeeName || null;
+
+    if (!district || !location || !paidToUserId) {
+      return NextResponse.json({ success: false, message: "Please select a district, location, and valid Paid To recipient." }, { status: 400 });
     }
 
-    console.log("[receipts.upload] File info:", { name: (file as any).name, size: file.size, type: file.type });
-
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      console.log("[receipts.upload] Unsupported file type:", file.type);
-      return NextResponse.json({ success: false, message: "Unsupported file type" }, { status: 400 });
+    const { data: recipientOptions, error: recipientOptionsError } = await getReceiptRecipientFilterOptions({ district, location });
+    if (recipientOptionsError) {
+      return NextResponse.json({ success: false, message: "Unable to validate the selected Paid To recipient.", details: recipientOptionsError.message }, { status: 500 });
+    }
+    const selectedRecipient = recipientOptions?.users.find((user) => user.id === paidToUserId) ?? null;
+    if (!selectedRecipient) {
+      return NextResponse.json({ success: false, message: "The selected Paid To recipient is not eligible for the chosen district and location." }, { status: 400 });
     }
 
-    if (file.size > MAX_FILE_SIZE) {
-      console.log("[receipts.upload] File too large:", file.size);
-      return NextResponse.json({ success: false, message: "File too large. Maximum allowed size is 5MB." }, { status: 400 });
+    const { data: recipientProfile, error: recipientProfileError } = await getUserById(paidToUserId);
+    if (recipientProfileError || !recipientProfile) {
+      return NextResponse.json({ success: false, message: "Selected Paid To recipient could not be verified." }, { status: 400 });
+    }
+    if (recipientProfile.status !== "approved" || recipientProfile.is_active === false || recipientProfile.district !== district || recipientProfile.village_city !== location) {
+      return NextResponse.json({ success: false, message: "The selected Paid To recipient is not active or does not match the district and location selection." }, { status: 400 });
     }
 
-    if (!amount || Number.isNaN(amount) || amount <= 0) {
-      console.log("[receipts.upload] Invalid amount:", amount);
-      return NextResponse.json({ success: false, message: "Invalid amount" }, { status: 400 });
+    if (!resolvedReference) {
+      return NextResponse.json({ success: false, message: "A transaction reference or transaction ID is required. Please upload a valid payment receipt or enter the reference manually." }, { status: 400 });
     }
 
-    if (!sahyogType) {
-      console.log("[receipts.upload] Missing sahyogType");
-      return NextResponse.json({ success: false, message: "Sahyog Type is required" }, { status: 400 });
+    if (!resolvedAmount || resolvedAmount <= 0 || Number.isNaN(resolvedAmount)) {
+      return NextResponse.json({ success: false, message: "Amount must be a valid positive INR value." }, { status: 400 });
     }
 
-    // Server-side uniqueness check
-    console.log("[receipts.upload] Checking existing transaction number:", transactionNumber);
-    const { data: existing } = await getReceiptByTransactionNumber(transactionNumber);
-    if (existing) {
-      console.log("[receipts.upload] Existing transaction found for:", transactionNumber);
-      return NextResponse.json({ success: false, message: "Transaction Number already exists. Please enter a valid and unused Transaction Number." }, { status: 409 });
+    if (resolvedDate && Number.isNaN(new Date(resolvedDate).getTime())) {
+      return NextResponse.json({ success: false, message: "Transaction date is invalid." }, { status: 400 });
     }
 
-    // Generate server-side unique receipt number via native SQL function call.
-    console.log("[receipts.upload] Requesting new receipt number from DB function");
+    const duplicateResult = await getReceiptByTransactionReference(resolvedReference);
+    if (duplicateResult.data) {
+      return NextResponse.json({ success: false, message: "This transaction reference, transaction ID, or UTR already exists for a previous receipt submission." }, { status: 409 });
+    }
+
     let receiptNumber: string;
     try {
-      const rows = await queryRows<{ receipt_number: string }>(
-        "SELECT receipts_get_next_receipt_number()::text AS receipt_number",
-      );
-      receiptNumber = rows[0]?.receipt_number ?? String(Date.now());
+      receiptNumber = await generateReceiptNumber();
     } catch (rnError: any) {
-      console.error("[receipts.upload] Failed to obtain receipt number from DB function:", rnError);
-      return NextResponse.json({ success: false, message: "Failed to generate receipt number", details: rnError?.message ?? null }, { status: 500 });
-    }
-    console.log("[receipts.upload] Generated receipt number:", receiptNumber);
-
-    // Save file locally under project root 'payment_receipt' directory
-    const projectRoot = process.cwd();
-    const storageDir = path.join(projectRoot, "payment_receipt");
-    try {
-      await fs.promises.mkdir(storageDir, { recursive: true });
-    } catch (mkErr) {
-      console.error("[receipts.upload] Failed to create storage directory:", mkErr);
-      return NextResponse.json({ success: false, message: "Server error while preparing storage", details: String(mkErr) }, { status: 500 });
+      return NextResponse.json({ success: false, message: "Failed to generate receipt number.", details: rnError?.message ?? null }, { status: 500 });
     }
 
-    const originalName = String((file as any).name ?? "receipt").replace(/[^a-zA-Z0-9._-]/g, "_");
-    const ext = path.extname(originalName) || (file.type === "application/pdf" ? ".pdf" : "");
-    const safeFileName = `${receiptNumber}${ext}`;
-    const savedPath = path.join(storageDir, safeFileName);
+    const safeFileName = `${crypto.randomUUID()}${path.extname(file.name || ".pdf") || ".pdf"}`;
+    const evidenceDir = path.join(process.cwd(), "private", "receipts", "evidence");
+    await fs.mkdir(evidenceDir, { recursive: true });
 
-    // Prevent path traversal by ensuring resolved path starts with storageDir
-    const resolved = path.resolve(savedPath);
-    if (!resolved.startsWith(path.resolve(storageDir))) {
-      console.error("[receipts.upload] Unsafe file path resolved:", resolved);
-      return NextResponse.json({ success: false, message: "Invalid file name" }, { status: 400 });
-    }
+    const evidencePath = path.join(evidenceDir, safeFileName);
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
+    await fs.writeFile(evidencePath, fileBuffer, { flag: "wx" });
 
-    // write file
-    try {
-      const arrayBuffer = await (file as any).arrayBuffer();
-      await fs.promises.writeFile(resolved, Buffer.from(arrayBuffer), { flag: "wx" });
-    } catch (writeErr) {
-      console.error("[receipts.upload] Failed to write file locally:", writeErr);
-      return NextResponse.json({ success: false, message: "Failed to save file", details: String(writeErr) }, { status: 500 });
-    }
+    const relativeEvidencePath = path.relative(process.cwd(), evidencePath).split(path.sep).join("/");
+    const uploaderProfile = await getUserProfileById(session.user.id);
+    const paidByName = uploaderProfile.data?.name ?? session.user.name ?? null;
+    const paidByDistrict = uploaderProfile.data?.district ?? session.user.district ?? null;
 
-    // Insert receipt record. transaction_id will be generated by DB trigger/sequence
-    const relativeFilePath = path.join("payment_receipt", safeFileName);
-    const insertPayload = {
+    const insertPayload: Record<string, unknown> = {
       receipt_number: receiptNumber,
-      transaction_number: transactionNumber,
+      transaction_number: resolvedReference,
       user_id: session.user.id,
-      amount: Number(amount),
+      paid_to_user_id: paidToUserId,
+      paid_by_name: paidByName,
+      paid_by_district: paidByDistrict,
+      paid_to_name: recipientProfile.name,
+      paid_to_district: recipientProfile.district ?? district,
+      amount: Number(resolvedAmount),
       sahyog_type: sahyogType,
-      file_name: safeFileName,
-      file_path: relativeFilePath,
-      uploaded_file_path: relativeFilePath,
-      file_type: file.type,
+      uploaded_file_path: relativeEvidencePath,
+      file_name: file.name || safeFileName,
+      file_path: relativeEvidencePath,
+      file_type: fileValidation.mimeType || file.type || "application/octet-stream",
+      file_size_bytes: file.size,
       status: "uploaded",
-    } as Record<string, unknown>;
+      payment_provider: resolvedProvider,
+      transaction_date: resolvedDate || null,
+      transaction_time: resolvedTime || null,
+      transaction_utr: resolvedUtr || null,
+      extraction_status: extracted.extractionStatus,
+      review_status: needsManualReview ? "needs_review" : extracted.extractionStatus === "complete" ? "reviewed" : "pending",
+      extracted_metadata: {
+        paymentProvider: resolvedProvider,
+        transactionDate: resolvedDate,
+        transactionTime: resolvedTime,
+        amount: Number(resolvedAmount),
+        transactionId: resolvedTransactionId,
+        utr: resolvedUtr,
+        payerName: resolvedPayerName,
+        payeeName: resolvedPayeeName,
+        warnings: extracted.warnings,
+      },
+      extracted_text: extracted.rawText.slice(0, 20000),
+    };
 
-    console.log("[receipts.upload] Inserting receipt record to DB, payload keys:", Object.keys(insertPayload));
+    if (resolvedTransactionId) {
+      insertPayload.transaction_id = resolvedTransactionId;
+    }
+
     const { data, error } = await createReceipt(insertPayload);
     if (error) {
-      console.error("[receipts.upload] DB insert error for receipt:", error);
-      // attempt to clean up uploaded file to avoid orphaned files
       try {
-        await fs.promises.unlink(resolved);
-      } catch (rmErr) {
-        console.error("[receipts.upload] Failed to remove uploaded file after DB error:", rmErr);
+        await fs.unlink(evidencePath);
+      } catch {
+        // ignore cleanup failures
       }
-      // handle unique constraint race
+
       if ((error as any)?.code === "23505" || /unique/.test(String((error as any)?.message ?? ""))) {
-        return NextResponse.json({ success: false, message: "Transaction Number or Receipt Number already exists. Please retry with a new Transaction Number." }, { status: 409 });
+        return NextResponse.json({ success: false, message: "This payment reference or receipt number is already in use." }, { status: 409 });
       }
-      return NextResponse.json({ success: false, message: "Failed to save receipt", details: (error as any)?.message ?? null }, { status: 500 });
+      return NextResponse.json({ success: false, message: "Failed to save the receipt record.", details: (error as any)?.message ?? null }, { status: 500 });
     }
 
-    console.log("[receipts.upload] Success, receipt inserted with id:", data?.id);
+    const { data: profile } = await getUserProfileById(session.user.id);
+    const profileAddress = buildProfileAddress({
+      house_flat_no: profile?.house_flat_no ?? null,
+      street_locality: profile?.street_locality ?? null,
+      landmark: profile?.landmark ?? null,
+      village_city: profile?.village_city ?? null,
+      district: profile?.district ?? null,
+      state: profile?.state ?? null,
+      pincode: profile?.pincode ?? null,
+      country: profile?.country ?? null,
+    });
 
-    // Generate acknowledgement PDF and update receipt record with generated path
+    const user = {
+      name: profile?.name ?? session.user.name ?? null,
+      phone_number: profile?.phone_number ?? null,
+      email: profile?.email ?? session.user.email ?? null,
+      address: profileAddress,
+      paid_by_name: paidByName,
+      paid_by_district: paidByDistrict,
+      paid_to_name: recipientProfile.name,
+      paid_to_district: recipientProfile.district ?? district,
+    };
+
+    const logoPath = path.join(process.cwd(), "public", "images", "Self_Welfare_Society_Registration.jpg");
+    const { file: managedLogo } = await getLogoFile();
+    const logoBuffer = managedLogo && managedLogo.mimeType !== "image/webp" ? managedLogo.buffer : undefined;
+
     try {
-      // fetch user details for PDF
-      const userId = session.user.id;
-      const { data: userData } = await getReceiptById(String(data.id));
-      // build minimal user object from session where possible
-      const user = {
-        name: session.user.name ?? null,
-        phone_number: (session.user as any).phone_number ?? null,
-        email: session.user.email ?? null,
-      };
+      const pdfRelativePath = await generateReceiptPdf({
+        ...(data as any),
+        receipt_number: receiptNumber,
+        transaction_number: resolvedReference,
+        transaction_id: resolvedTransactionId || (data as any)?.transaction_id,
+        amount: Number(resolvedAmount),
+        created_at: (data as any)?.created_at,
+        id: (data as any)?.id,
+        user_id: session.user.id,
+        paid_by_name: paidByName,
+        paid_by_district: paidByDistrict,
+        paid_to_name: recipientProfile.name,
+        paid_to_district: recipientProfile.district ?? district,
+        sahyog_type: sahyogType,
+      }, user as any, { logoPath, logoBuffer });
 
-      const logoPath = path.join(process.cwd(), "public", "images", "Self_Welfare_Society_Registration.jpg");
-      // PDFKit only supports PNG/JPEG; WebP logos (or no logo) fall back to the default image.
-      const { file: managedLogo } = await getLogoFile();
-      const logoBuffer = managedLogo && managedLogo.mimeType !== "image/webp" ? managedLogo.buffer : undefined;
-      const pdfRelPath = await generateReceiptPdf(data as any, user as any, { logoPath, logoBuffer });
-
-      // update receipt record with generated PDF path in `receipt_file_path`
-      const { data: updated, error: updErr } = await updateReceipt(String((data as any).id), { receipt_file_path: pdfRelPath });
-      if (updErr) {
-        console.error("[receipts.upload] Failed to update receipt with pdf path:", updErr);
-        // cleanup: delete created PDF and DB record
-        try {
-          await fs.promises.unlink(path.join(process.cwd(), pdfRelPath));
-        } catch (e) {
-          console.error("[receipts.upload] Failed to remove generated pdf after update failure:", e);
-        }
-        await deleteReceipt(String((data as any).id));
-        return NextResponse.json({ success: false, message: "Failed to finalize receipt", details: (updErr as any)?.message ?? null }, { status: 500 });
+      const { data: updated, error: updateError } = await updateReceipt(String((data as any).id), { receipt_file_path: pdfRelativePath });
+      if (updateError) {
+        throw updateError;
       }
 
-      console.log("[receipts.upload] PDF generated and receipt updated:", pdfRelPath);
-      return NextResponse.json({ success: true, message: "Receipt uploaded", receipt: updated ?? data, file_path: relativeFilePath, receipt_pdf: pdfRelPath });
-    } catch (pdfErr) {
-      console.error("[receipts.upload] PDF generation failed:", pdfErr);
-      // Attempt cleanup: delete DB record and the uploaded file
+      return NextResponse.json({
+        success: true,
+        message: "Receipt uploaded successfully.",
+        receipt: updated ?? data,
+        extracted,
+        receipt_pdf: pdfRelativePath,
+      });
+    } catch (pdfError: any) {
       try {
         await deleteReceipt(String((data as any).id));
-      } catch (e) {
-        console.error("[receipts.upload] Failed to delete receipt after PDF failure:", e);
+      } catch {
+        // ignore cleanup errors
       }
       try {
-        await fs.promises.unlink(resolved);
-      } catch (e) {
-        console.error("[receipts.upload] Failed to remove uploaded file after PDF failure:", e);
+        await fs.unlink(evidencePath);
+      } catch {
+        // ignore cleanup errors
       }
-      return NextResponse.json({ success: false, message: "Failed to generate acknowledgement PDF", details: (pdfErr as any)?.message ?? null }, { status: 500 });
+      return NextResponse.json({ success: false, message: "Failed to generate the acknowledgement PDF.", details: pdfError?.message ?? null }, { status: 500 });
     }
-  } catch (err) {
-    // Log and return error details for debugging (adjust in production)
-    console.error("[receipts.upload] Unhandled exception in receipts upload:", err);
-    return NextResponse.json({ success: false, message: "Internal server error", details: (err as any)?.message ?? null }, { status: 500 });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, message: "Internal server error.", details: error?.message ?? null }, { status: 500 });
   }
 }

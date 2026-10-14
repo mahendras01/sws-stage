@@ -14,24 +14,42 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials, req) {
         const requestId = newRequestId();
-        const attemptedEmail = credentials?.email?.toLowerCase().trim();
+        const rawIdentifier = String(credentials?.email ?? "").trim();
+        const attemptedEmail = rawIdentifier.toLowerCase();
         const forwarded = req?.headers?.["x-forwarded-for"];
         const ip = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(",")[0].trim();
 
-        if (!credentials?.email || !credentials?.password) {
-          log.warn("auth.login.failed", { requestId, ip, reason: "missing_credentials", email: attemptedEmail });
-          throw new Error("Email and password are required");
+        if (!rawIdentifier || !credentials?.password) {
+          log.warn("auth.login.failed", { requestId, ip, reason: "missing_credentials", email: attemptedEmail || null });
+          throw new Error("Email/mobile number and password are required");
+        }
+
+        const normalizedDigits = rawIdentifier.replace(/\D/g, "");
+        const isEmailInput = rawIdentifier.includes("@") && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawIdentifier);
+        const isMobileInput = /^\d{10}$/.test(normalizedDigits);
+
+        if (!isEmailInput && !isMobileInput) {
+          log.warn("auth.login.failed", { requestId, ip, reason: "invalid_identifier", identifier: rawIdentifier });
+          throw new Error("Invalid email or mobile number");
         }
 
         let user: any = null;
         let error: { message: string } | null = null;
 
         try {
-          const rows = await queryRows<any>(
-            "SELECT id, email, name, password_hash, status, is_admin, role, district, phone_number, ehrms_code FROM users WHERE email = $1 LIMIT 1",
-            [credentials.email.toLowerCase().trim()],
-          );
-          user = rows[0] ?? null;
+          if (isEmailInput) {
+            const rows = await queryRows<any>(
+              "SELECT id, email, name, password_hash, status, is_admin, role, district, phone_number, ehrms_code FROM users WHERE LOWER(email) = $1 LIMIT 1",
+              [rawIdentifier.toLowerCase()],
+            );
+            user = rows[0] ?? null;
+          } else {
+            const rows = await queryRows<any>(
+              "SELECT id, email, name, password_hash, status, is_admin, role, district, phone_number, ehrms_code FROM users WHERE phone_number = $1 OR REPLACE(phone_number, ' ', '') = $1 LIMIT 1",
+              [normalizedDigits],
+            );
+            user = rows[0] ?? null;
+          }
         } catch (dbError: any) {
           error = { message: dbError?.message ?? "Database error" };
         }
@@ -42,9 +60,15 @@ export const authOptions: NextAuthOptions = {
             ip,
             reason: error ? "db_error" : "user_not_found",
             email: attemptedEmail,
+            identifierType: isEmailInput ? "email" : "mobile",
             error: error ?? undefined,
           });
-          throw new Error("Invalid email or password");
+          throw new Error("Invalid email/mobile number or password");
+        }
+
+        if (user.role === "super_admin" && isMobileInput) {
+          log.warn("auth.login.failed", { requestId, ip, reason: "super_admin_mobile_blocked", user: summarizeUser(user) });
+          throw new Error("Invalid email/mobile number or password");
         }
 
         const userSummary = summarizeUser(user);
@@ -62,7 +86,7 @@ export const authOptions: NextAuthOptions = {
         const isValid = await bcrypt.compare(credentials.password, user.password_hash);
         if (!isValid) {
           log.warn("auth.login.failed", { requestId, ip, reason: "invalid_password", user: userSummary });
-          throw new Error("Invalid email or password");
+          throw new Error("Invalid email/mobile number or password");
         }
 
         log.info("auth.login.success", { requestId, ip, user: { ...userSummary, district: user.district } });

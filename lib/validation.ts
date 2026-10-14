@@ -103,39 +103,37 @@ export function validateSignup(data: SignupInput): ValidationResult {
   };
 
   if (!normalized.name || normalized.name.length < 3) {
-    errors.name = "Full name must be at least 3 characters";
+    errors.name = "पूरा नाम कम से कम 3 अक्षरों का होना चाहिए";
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!normalized.email || !emailRegex.test(normalized.email)) {
-    errors.email = "Valid email is required";
+    errors.email = "मान्य ईमेल आवश्यक है";
   }
 
   if (!normalized.password || !PASSWORD_POLICY.test(normalized.password)) {
-    errors.password = "Password must be at least 8 characters.";
+    errors.password = "पासवर्ड कम से कम 8 अक्षरों का होना चाहिए।";
   }
 
-  if (!normalized.confirm_password) {
-    errors.confirm_password = "Please confirm your password.";
-  } else if (normalized.password && normalized.confirm_password !== normalized.password) {
-    errors.confirm_password = "Passwords do not match.";
+  if (normalized.confirm_password && normalized.password && normalized.confirm_password !== normalized.password) {
+    errors.confirm_password = "पासवर्ड मेल नहीं खाते।";
   }
 
-  if (!normalized.aadhar_number || !/^\d{12}$/.test(normalized.aadhar_number)) {
-    errors.aadhar_number = "Aadhar must be exactly 12 digits";
+  if (normalized.aadhar_number && !/^\d{12}$/.test(normalized.aadhar_number)) {
+    errors.aadhar_number = "आधार संख्या बिल्कुल 12 अंकों की होनी चाहिए";
   }
 
   const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
-  if (!normalized.pan_number || !panRegex.test(normalized.pan_number.toUpperCase())) {
-    errors.pan_number = "Invalid PAN format (e.g., ABCDE1234F)";
+  if (normalized.pan_number && !panRegex.test(normalized.pan_number.toUpperCase())) {
+    errors.pan_number = "PAN प्रारूप मान्य नहीं है (उदा., ABCDE1234F)";
   }
 
   if (!normalized.date_of_birth) {
-    errors.date_of_birth = "Date Of Birth (As per Aadhar) is required";
+    errors.date_of_birth = "जन्म तिथि (आधार के अनुसार) आवश्यक है";
   } else {
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRegex.test(normalized.date_of_birth)) {
-      errors.date_of_birth = "Enter a valid date in YYYY-MM-DD format";
+      errors.date_of_birth = "कृपया YYYY-MM-DD प्रारूप में सही तिथि दर्ज करें";
     } else {
       const dob = new Date(`${normalized.date_of_birth}T00:00:00`);
       const today = new Date();
@@ -143,15 +141,15 @@ export function validateSignup(data: SignupInput): ValidationResult {
       minimumDate.setFullYear(today.getFullYear() - 120);
 
       if (Number.isNaN(dob.getTime()) || dob > today) {
-        errors.date_of_birth = "Date of birth cannot be in the future";
+        errors.date_of_birth = "जन्म तिथि भविष्य में नहीं हो सकती";
       } else if (dob < minimumDate) {
-        errors.date_of_birth = "Date of birth must be a realistic value";
+        errors.date_of_birth = "जन्म तिथि वास्तविक मान होना चाहिए";
       } else {
         const age = getAgeFromDob(normalized.date_of_birth);
         if (age === null) {
-          errors.date_of_birth = "Date of birth is invalid";
+          errors.date_of_birth = "जन्म तिथि मान्य नहीं है";
         } else if (age < 18 || age > 55) {
-          errors.date_of_birth = "Registration is allowed only for members aged 18 to 55 years.";
+          errors.date_of_birth = "पंजीकरण केवल 18 से 55 वर्ष की आयु वाले सदस्यों के लिए है।";
         }
       }
     }
@@ -161,119 +159,120 @@ export function validateSignup(data: SignupInput): ValidationResult {
   const confirmEhrmsCode = normalized.confirm_ehrms_code.toUpperCase();
 
   if (!normalized.ehrms_code) {
-    errors.ehrms_code = "EHRMS code is required";
+    errors.ehrms_code = "EHRMS कोड आवश्यक है";
   } else if (ehrmsCode !== confirmEhrmsCode) {
-    errors.confirm_ehrms_code = "EHRMS code and confirm EHRMS code do not match";
+    errors.confirm_ehrms_code = "EHRMS कोड और पुष्टिकरण कोड मेल नहीं खाते";
   }
 
   if (normalized.role_number && normalized.role_number.length < 2) {
-    errors.role_number = "Role number must be at least 2 characters if entered";
+    errors.role_number = "रोल नंबर कम से कम 2 अक्षरों का होना चाहिए, यदि दर्ज किया गया है";
   }
 
-  if (!normalized.gender || !["Male", "Female", "Other"].includes(normalized.gender)) {
-    errors.gender = "Please select a valid gender";
+  const validGenderValues = new Set(["Male", "Female", "Other", "पुरुष", "महिला", "अन्य"]);
+  if (!normalized.gender || !validGenderValues.has(normalized.gender)) {
+    errors.gender = "कृपया सही लिंग चुनें";
   }
 
   if (!normalized.father_husband_name || normalized.father_husband_name.length < 2) {
-    errors.father_husband_name = "Father/Husband name is required";
+    errors.father_husband_name = "पिता/पति का नाम आवश्यक है";
   }
 
   if (!normalized.department_id) {
-    errors.department_id = "Department is required";
+    errors.department_id = "विभाग आवश्यक है";
   }
 
   if (!normalized.post_id) {
-    errors.post_id = "Post is required";
+    errors.post_id = "पद आवश्यक है";
   }
 
   if (!normalized.nominee_name || normalized.nominee_name.length < 2) {
-    errors.nominee_name = "Nominee name is required";
+    errors.nominee_name = "नॉमिनी का नाम आवश्यक है";
   }
 
   if (!normalized.nominee_relationship || normalized.nominee_relationship.length < 2) {
-    errors.nominee_relationship = "Nominee relationship is required";
+    errors.nominee_relationship = "नॉमिनी का संबंध आवश्यक है";
   }
 
   if (!normalized.nominee_mobile_number || !/^\d{10}$/.test(normalized.nominee_mobile_number)) {
-    errors.nominee_mobile_number = "Nominee mobile number must be exactly 10 digits";
+    errors.nominee_mobile_number = "नॉमिनी का मोबाइल नंबर बिल्कुल 10 अंकों का होना चाहिए";
   }
 
-  if (!normalized.nominee_aadhar_number || !/^\d{12}$/.test(normalized.nominee_aadhar_number)) {
-    errors.nominee_aadhar_number = "Nominee Aadhaar number must be exactly 12 digits";
+  if (normalized.nominee_aadhar_number && !/^\d{12}$/.test(normalized.nominee_aadhar_number)) {
+    errors.nominee_aadhar_number = "नॉमिनी का आधार नंबर बिल्कुल 12 अंकों का होना चाहिए";
   }
 
   if (normalized.reference_name && normalized.reference_name.length < 2) {
-    errors.reference_name = "Reference name must be at least 2 characters if entered";
+    errors.reference_name = "संदर्भ नाम कम से कम 2 अक्षरों का होना चाहिए, यदि दर्ज किया गया है";
   }
 
   if (!normalized.phone_number || !/^\d{10}$/.test(normalized.phone_number)) {
-    errors.phone_number = "Phone number must be exactly 10 digits";
+    errors.phone_number = "फोन नंबर बिल्कुल 10 अंकों का होना चाहिए";
   }
 
   if (!normalized.blood_group || !/^(A|B|AB|O)[+-]$/.test(normalized.blood_group)) {
-    errors.blood_group = "Please select a valid blood group";
+    errors.blood_group = "कृपया सही रक्त समूह चुनें";
   }
 
   if (!normalized.house_flat_no) {
-    errors.house_flat_no = "House/Flat No. is required";
+    errors.house_flat_no = "मकान/फ्लैट नंबर आवश्यक है";
   }
 
   if (!normalized.street_locality) {
-    errors.street_locality = "Street/Locality is required";
+    errors.street_locality = "सड़क/इलाका आवश्यक है";
   }
 
   if (!normalized.village_city) {
-    errors.village_city = "Village/City is required";
+    errors.village_city = "गाँव/शहर आवश्यक है";
   }
 
   if (!normalized.district) {
-    errors.district = "District is required";
+    errors.district = "जिला आवश्यक है";
   }
 
   if (!normalized.state) {
-    errors.state = "State is required";
+    errors.state = "राज्य आवश्यक है";
   }
 
   if (!normalized.pincode || !/^\d{6}$/.test(normalized.pincode)) {
-    errors.pincode = "PIN code must be exactly 6 digits";
+    errors.pincode = "पिन कोड बिल्कुल 6 अंकों का होना चाहिए";
   }
 
   if (!normalized.country) {
-    errors.country = "Country is required";
+    errors.country = "देश आवश्यक है";
   }
 
   if (!normalized.permanent_same_as_current) {
     if (!normalized.permanent_house_flat_no) {
-      errors.permanent_house_flat_no = "Permanent house/flat no. is required";
+      errors.permanent_house_flat_no = "स्थायी मकान/फ्लैट नंबर आवश्यक है";
     }
 
     if (!normalized.permanent_street_locality) {
-      errors.permanent_street_locality = "Permanent street/locality is required";
+      errors.permanent_street_locality = "स्थायी सड़क/इलाका आवश्यक है";
     }
 
     if (!normalized.permanent_village_city) {
-      errors.permanent_village_city = "Permanent village/city is required";
+      errors.permanent_village_city = "स्थायी गाँव/शहर आवश्यक है";
     }
 
     if (!normalized.permanent_district) {
-      errors.permanent_district = "Permanent district is required";
+      errors.permanent_district = "स्थायी जिला आवश्यक है";
     }
 
     if (!normalized.permanent_state) {
-      errors.permanent_state = "Permanent state is required";
+      errors.permanent_state = "स्थायी राज्य आवश्यक है";
     }
 
     if (!normalized.permanent_pincode || !/^\d{6}$/.test(normalized.permanent_pincode)) {
-      errors.permanent_pincode = "Permanent PIN code must be exactly 6 digits";
+      errors.permanent_pincode = "स्थायी पिन कोड बिल्कुल 6 अंकों का होना चाहिए";
     }
 
     if (!normalized.permanent_country) {
-      errors.permanent_country = "Permanent country is required";
+      errors.permanent_country = "स्थायी देश आवश्यक है";
     }
   }
 
   if (!normalized.accept_terms) {
-    errors.accept_terms = "You must accept the Terms and Privacy Policy to continue";
+    errors.accept_terms = "आगे बढ़ने के लिए नियम और गोपनीयता नीति स्वीकार करें";
   }
 
   return { valid: Object.keys(errors).length === 0, errors };

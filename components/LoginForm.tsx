@@ -9,7 +9,7 @@ import { useToast } from "@/components/Toast";
 export default function LoginForm() {
   const router = useRouter();
   const { showToast } = useToast();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -18,8 +18,8 @@ export default function LoginForm() {
     e.preventDefault();
     setErrors({});
 
-    if (!email || !password) {
-      setErrors({ form: "Email and password are required" });
+    if (!identifier || !password) {
+      setErrors({ form: "ईमेल/मोबाइल नंबर और पासवर्ड आवश्यक हैं" });
       return;
     }
 
@@ -27,7 +27,7 @@ export default function LoginForm() {
 
     try {
       const result = await signIn("credentials", {
-        email,
+        email: identifier,
         password,
         redirect: false,
       });
@@ -40,12 +40,12 @@ export default function LoginForm() {
         const sessionData = await sessionResponse.json();
         const isAdmin = !!sessionData?.user?.is_admin;
 
-        showToast("Login successful", "success");
+        showToast("लॉगिन सफल", "success");
         router.push(isAdmin ? "/dashboard" : "/");
         router.refresh();
       }
     } catch {
-      showToast("An error occurred during login", "error");
+      showToast("लॉगिन के दौरान कोई त्रुटि हुई", "error");
     } finally {
       setLoading(false);
     }
@@ -54,8 +54,8 @@ export default function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="card mx-auto w-full max-w-md space-y-4">
       <div className="text-center">
-        <h1 className="text-2xl font-bold text-gray-900">Welcome Back</h1>
-        <p className="mt-1 text-sm text-neutral">Sign in to your account</p>
+        <h1 className="text-2xl font-bold text-gray-900">फिर से स्वागत है</h1>
+        <p className="mt-1 text-sm text-neutral">अपने खाते में साइन इन करें</p>
       </div>
 
       {errors.form && (
@@ -63,23 +63,23 @@ export default function LoginForm() {
       )}
 
       <div>
-        <label htmlFor="email" className="label-text">
-          Email
+        <label htmlFor="identifier" className="label-text">
+          ईमेल या मोबाइल नंबर
         </label>
         <input
-          id="email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          id="identifier"
+          type="text"
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)}
           className="input-field"
-          placeholder="you@example.com"
-          autoComplete="email"
+          placeholder="you@example.com या 10 अंकों का मोबाइल नंबर"
+          autoComplete="username"
         />
       </div>
 
       <div>
         <label htmlFor="password" className="label-text">
-          Password
+          पासवर्ड
         </label>
         <input
           id="password"
@@ -93,13 +93,13 @@ export default function LoginForm() {
       </div>
 
       <button type="submit" disabled={loading} className="btn-primary w-full">
-        {loading ? "Signing in..." : "Sign In"}
+        {loading ? "साइन इन हो रहा है..." : "साइन इन"}
       </button>
 
       <p className="text-center text-sm text-neutral">
-        Don&apos;t have an account?{" "}
+        क्या आपका खाता नहीं है?{" "}
         <Link href="/signup" className="font-medium text-primary hover:underline">
-          Sign up
+          साइन अप करें
         </Link>
       </p>
     </form>

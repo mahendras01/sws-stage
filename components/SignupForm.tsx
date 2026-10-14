@@ -12,7 +12,6 @@ type SignupFormState = {
   name: string;
   email: string;
   password: string;
-  confirm_password: string;
   aadhar_number: string;
   pan_number: string;
   date_of_birth: string;
@@ -67,7 +66,6 @@ const initialFormState: SignupFormState = {
   name: "",
   email: "",
   password: "",
-  confirm_password: "",
   aadhar_number: "",
   pan_number: "",
   date_of_birth: "",
@@ -169,13 +167,13 @@ export default function SignupForm() {
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.message || "Unable to load department data.");
+          throw new Error(data.message || "विभाग डेटा लोड नहीं हो सका।");
         }
 
         setDepartments(data.departments ?? []);
         setPosts(data.posts ?? []);
       } catch {
-        setErrors((prev) => ({ ...prev, department_id: "Unable to load departments and posts right now." }));
+        setErrors((prev) => ({ ...prev, department_id: "विभाग और पद अभी लोड नहीं हो सके हैं।" }));
       } finally {
         setMasterDataReady(true);
       }
@@ -196,7 +194,7 @@ export default function SignupForm() {
     }
 
     try {
-      setPincodeStatus("Checking PIN code...");
+      setPincodeStatus("पिन कोड की जाँच की जा रही है...");
       const options = await lookupPincodeDetails(normalized);
       setPincodeOptions(options);
 
@@ -218,13 +216,13 @@ export default function SignupForm() {
       setErrors((prev) => ({ ...prev, pincode: "", district: "", state: "", village_city: "" }));
       setPincodeStatus(
         options.length > 1
-          ? "Multiple locations found for this PIN code. Please choose the correct village/city."
-          : "PIN code matched successfully.",
+          ? "इस पिन कोड के लिए कई स्थान मिले हैं। कृपया सही गाँव/शहर चुनें।"
+          : "पिन कोड सही मिल गया है।",
       );
     } catch (error) {
       setPincodeOptions([]);
-      setPincodeStatus(error instanceof Error ? error.message : "Unable to fetch location details for this PIN code. Please try again.");
-      setErrors((prev) => ({ ...prev, pincode: error instanceof Error ? error.message : "Unable to fetch location details for this PIN code." }));
+      setPincodeStatus(error instanceof Error ? error.message : "इस पिन कोड के लिए स्थान की जानकारी नहीं मिल सकी। कृपया पुनः प्रयास करें।");
+      setErrors((prev) => ({ ...prev, pincode: error instanceof Error ? error.message : "इस पिन कोड के लिए स्थान की जानकारी नहीं मिल सकी।" }));
     }
   };
 
@@ -312,8 +310,8 @@ export default function SignupForm() {
     setErrors({});
 
     if (!form.accept_terms) {
-      setErrors({ accept_terms: "You must accept the Terms and Privacy Policy to continue." });
-      showToast("Please accept the terms and privacy policy to register.", "error");
+      setErrors({ accept_terms: "आगे बढ़ने के लिए नियम और गोपनीयता नीति स्वीकार करें।" });
+      showToast("पंजीकरण के लिए नियम और गोपनीयता नीति स्वीकार करें।", "error");
       setLoading(false);
       return;
     }
@@ -360,14 +358,14 @@ export default function SignupForm() {
         if (data.errors) {
           setErrors(data.errors);
         }
-        showToast(data.message || "Signup failed", "error");
+        showToast(data.message || "पंजीकरण विफल रहा", "error");
         return;
       }
 
       setSuccess(true);
       showToast(data.message, "success");
     } catch {
-      showToast("An error occurred during signup", "error");
+      showToast("पंजीकरण के दौरान त्रुटि हुई", "error");
     } finally {
       setLoading(false);
     }
@@ -381,72 +379,68 @@ export default function SignupForm() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h2 className="text-xl font-bold text-gray-900">Registration Submitted</h2>
+        <h2 className="text-xl font-bold text-gray-900">पंजीकरण सफल</h2>
         <p className="mt-2 text-neutral">
-          Waiting for admin approval. You will be able to login once your account is approved.
+          व्यवस्थापक की मंजूरी का इंतजार है। आपके खाते की मंजूरी होने पर आप लॉगिन कर सकेंगे।
         </p>
         <Link href="/login" className="btn-primary mt-6 inline-block">
-          Go to Login
+          लॉगिन पर जाएँ
         </Link>
       </div>
     );
   }
 
   const personalFields: FieldConfig[] = [
-    { name: "name", label: "Full Name", type: "text", placeholder: "Enter your full name" },
-    { name: "father_husband_name", label: "Father's Name", type: "text", placeholder: "Enter father's name" },
-    { name: "email", label: "Email", type: "email", placeholder: "you@example.com" },
+    { name: "name", label: "पूरा नाम", type: "text", placeholder: "अपना पूरा नाम दर्ज करें" },
+    { name: "father_husband_name", label: "पिता का नाम", type: "text", placeholder: "पिता का नाम दर्ज करें" },
+    { name: "email", label: "ईमेल", type: "email", placeholder: "you@example.com" },
     {
       name: "password",
-      label: "Password",
+      label: "पासवर्ड",
       type: "password",
-      placeholder: "Minimum 8 characters",
+      placeholder: "कम से कम 8 अक्षर",
     },
-    { name: "confirm_password", label: "Confirm Password", type: "password", placeholder: "Re-enter password" },
-    { name: "aadhar_number", label: "Aadhar Number", type: "text", placeholder: "12 digits" },
-    { name: "pan_number", label: "PAN Number", type: "text", placeholder: "ABCDE1234F" },
-    { name: "date_of_birth", label: "Date Of Birth (As per Aadhar)", type: "date" },
-    { name: "phone_number", label: "Phone Number", type: "tel", placeholder: "10 digits" },
-    { name: "blood_group", label: "Blood Group", type: "select" },
+    { name: "date_of_birth", label: "जन्म तिथि (आधार के अनुसार)", type: "date" },
+    { name: "phone_number", label: "फोन नंबर", type: "tel", placeholder: "10 अंकों का नंबर" },
+    { name: "blood_group", label: "रक्त समूह", type: "select" },
   ] as const;
 
   const employmentFields: FieldConfig[] = [
-    { name: "ehrms_code", label: "EHRMS कोड", type: "text", placeholder: "Enter EHRMS code" },
-    { name: "confirm_ehrms_code", label: "EHRMS कोड की पुष्टि करें", type: "text", placeholder: "Re-enter EHRMS code" },
-    { name: "role_number", label: "Role Number", type: "text", placeholder: "Enter role number if any" },
-    { name: "gender", label: "जेंडर", type: "select" },
-    { name: "department_id", label: "विभाग (Department)", type: "select" },
-    { name: "post_id", label: "पद (Post)", type: "select" },
-    { name: "nominee_name", label: "नॉमिनी का नाम", type: "text", placeholder: "Enter nominee name" },
-    { name: "nominee_relationship", label: "नॉमिनी से संबंध", type: "text", placeholder: "Enter relationship" },
-    { name: "nominee_mobile_number", label: "नॉमिनी का मोबाइल नंबर", type: "tel", placeholder: "10 digits" },
-    { name: "nominee_aadhar_number", label: "Nominee Aadhaar Number (नॉमिनी का आधार नंबर)", type: "text", placeholder: "12 digits", inputMode: "numeric" },
-    { name: "reference_name", label: "Reference Name (Who referred you for registration?)", type: "text", placeholder: "Enter referral name if any" },
-    { name: "pincode", label: "PIN Code", type: "text", placeholder: "6 digits", inputMode: "numeric" },
-    { name: "village_city", label: "Block / Village / City", type: "text", placeholder: "Enter block, village or city" },
-    { name: "district", label: "District", type: "text", placeholder: "Enter district" },
+    { name: "ehrms_code", label: "EHRMS कोड", type: "text", placeholder: "EHRMS कोड दर्ज करें" },
+    { name: "confirm_ehrms_code", label: "EHRMS कोड की पुष्टि करें", type: "text", placeholder: "EHRMS कोड पुनः दर्ज करें" },
+    { name: "role_number", label: "रोल नंबर", type: "text", placeholder: "यदि हो तो रोल नंबर दर्ज करें" },
+    { name: "gender", label: "लिंग", type: "select" },
+    { name: "department_id", label: "विभाग", type: "select" },
+    { name: "post_id", label: "पद", type: "select" },
+    { name: "nominee_name", label: "नॉमिनी का नाम", type: "text", placeholder: "नॉमिनी का नाम दर्ज करें" },
+    { name: "nominee_relationship", label: "नॉमिनी से संबंध", type: "text", placeholder: "संबंध दर्ज करें" },
+    { name: "nominee_mobile_number", label: "नॉमिनी का मोबाइल नंबर", type: "tel", placeholder: "10 अंकों का नंबर" },
+    { name: "reference_name", label: "संदर्भ नाम (कौन आपको पंजीकरण के लिए लेकर आया?)", type: "text", placeholder: "यदि कोई हो तो संदर्भ नाम दर्ज करें" },
+    { name: "pincode", label: "पिन कोड", type: "text", placeholder: "6 अंकों का कोड", inputMode: "numeric" },
+    { name: "village_city", label: "ब्लॉक / गाँव / शहर", type: "text", placeholder: "ब्लॉक, गाँव या शहर दर्ज करें" },
+    { name: "district", label: "जिला", type: "text", placeholder: "जिला दर्ज करें" },
   ] as const;
 
   const currentAddressFields: FieldConfig[] = [
-    { name: "house_flat_no", label: "House/Flat No.", type: "text", placeholder: "Enter house or flat number", fullWidth: true },
-    { name: "street_locality", label: "Street/Locality", type: "text", placeholder: "Enter street or locality", fullWidth: true },
-    { name: "landmark", label: "Landmark (Optional)", type: "text", placeholder: "Enter landmark", fullWidth: true },
-    { name: "pincode", label: "PIN Code", type: "text", placeholder: "6 digits", inputMode: "numeric" },
-    { name: "village_city", label: "Village/City", type: "text", placeholder: "Enter village or city" },
-    { name: "district", label: "District", type: "text", placeholder: "Enter district" },
-    { name: "state", label: "State", type: "select", placeholder: "Select state" },
-    { name: "country", label: "Country", type: "text", placeholder: "India", readOnly: true },
+    { name: "house_flat_no", label: "मकान/फ्लैट नंबर", type: "text", placeholder: "मकान या फ्लैट नंबर दर्ज करें", fullWidth: true },
+    { name: "street_locality", label: "सड़क/इलाका", type: "text", placeholder: "सड़क या इलाका दर्ज करें", fullWidth: true },
+    { name: "landmark", label: "स्मारक (वैकल्पिक)", type: "text", placeholder: "स्मारक दर्ज करें", fullWidth: true },
+    { name: "pincode", label: "पिन कोड", type: "text", placeholder: "6 अंकों का कोड", inputMode: "numeric" },
+    { name: "village_city", label: "गाँव/शहर", type: "text", placeholder: "गाँव या शहर दर्ज करें" },
+    { name: "district", label: "जिला", type: "text", placeholder: "जिला दर्ज करें" },
+    { name: "state", label: "राज्य", type: "select", placeholder: "राज्य चुनें" },
+    { name: "country", label: "देश", type: "text", placeholder: "भारत", readOnly: true },
   ] as const;
 
   const permanentAddressFields: FieldConfig[] = [
-    { name: "permanent_house_flat_no", label: "House/Flat No.", type: "text", placeholder: "Enter permanent house or flat number", fullWidth: true },
-    { name: "permanent_street_locality", label: "Street/Locality", type: "text", placeholder: "Enter permanent street or locality", fullWidth: true },
-    { name: "permanent_landmark", label: "Landmark (Optional)", type: "text", placeholder: "Enter permanent landmark", fullWidth: true },
-    { name: "permanent_pincode", label: "PIN Code", type: "text", placeholder: "6 digits", inputMode: "numeric" },
-    { name: "permanent_village_city", label: "Village/City", type: "text", placeholder: "Enter permanent village or city" },
-    { name: "permanent_district", label: "District", type: "text", placeholder: "Enter permanent district" },
-    { name: "permanent_state", label: "State", type: "select", placeholder: "Select permanent state" },
-    { name: "permanent_country", label: "Country", type: "text", placeholder: "India", readOnly: true },
+    { name: "permanent_house_flat_no", label: "मकान/फ्लैट नंबर", type: "text", placeholder: "स्थायी मकान या फ्लैट नंबर दर्ज करें", fullWidth: true },
+    { name: "permanent_street_locality", label: "सड़क/इलाका", type: "text", placeholder: "स्थायी सड़क या इलाका दर्ज करें", fullWidth: true },
+    { name: "permanent_landmark", label: "स्मारक (वैकल्पिक)", type: "text", placeholder: "स्थायी स्मारक दर्ज करें", fullWidth: true },
+    { name: "permanent_pincode", label: "पिन कोड", type: "text", placeholder: "6 अंकों का कोड", inputMode: "numeric" },
+    { name: "permanent_village_city", label: "गाँव/शहर", type: "text", placeholder: "स्थायी गाँव या शहर दर्ज करें" },
+    { name: "permanent_district", label: "जिला", type: "text", placeholder: "स्थायी जिला दर्ज करें" },
+    { name: "permanent_state", label: "राज्य", type: "select", placeholder: "स्थायी राज्य चुनें" },
+    { name: "permanent_country", label: "देश", type: "text", placeholder: "भारत", readOnly: true },
   ] as const;
 
   const renderField = (field: FieldConfig) => {
@@ -515,8 +509,8 @@ export default function SignupForm() {
           readOnly={field.readOnly}
           inputMode={field.inputMode}
         />
-        {(field.name === "password" || field.name === "confirm_password") && !isError && (
-          <p className="mt-1 text-[11px] text-slate-500">Minimum 8 characters. Passwords must match.</p>
+        {field.name === "password" && !isError && (
+          <p className="mt-1 text-[11px] text-slate-500">कम से कम 8 अक्षर.</p>
         )}
         {field.name === "pincode" && pincodeStatus && (
           <p className={`mt-1 text-xs ${errors.pincode ? "text-danger" : "text-slate-500"}`}>{pincodeStatus}</p>
@@ -534,8 +528,8 @@ export default function SignupForm() {
       className="card mx-auto w-full max-w-3xl space-y-6"
     >
       <div className="text-center">
-        <h1 className="text-2xl font-bold text-gray-900">Join the Society</h1>
-        <p className="mt-1 text-sm text-neutral">Register with your KYC details and address</p>
+        <h1 className="text-2xl font-bold text-gray-900">सोसायटी से जुड़ें</h1>
+        <p className="mt-1 text-sm text-neutral">अपनी KYC जानकारी और पता के साथ पंजीकरण करें</p>
       </div>
 
       <div className="space-y-4">
@@ -567,7 +561,7 @@ export default function SignupForm() {
               onChange={handleChange}
               className="mt-1 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
             />
-            <span>Permanent address is same as current address</span>
+            <span>स्थायी पता वर्तमान पते के समान है</span>
           </label>
         </div>
       </div>
@@ -589,25 +583,25 @@ export default function SignupForm() {
             className="mt-1 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
           />
           <span>
-            I agree to the <Link href="/terms" className="font-medium text-sky-700 underline">Terms and Conditions</Link>{" "}
-            and <Link href="/privacy-policy" className="font-medium text-sky-700 underline">Privacy Policy</Link>, and I confirm that the information provided is accurate.
+            मैं <Link href="/terms" className="font-medium text-sky-700 underline">नियम और शर्तें</Link>{" "}
+            तथा <Link href="/privacy-policy" className="font-medium text-sky-700 underline">गोपनीयता नीति</Link> से सहमत हूँ, और मैं पुष्टि करता हूँ कि प्रदान की गई जानकारी सही है।
           </span>
         </label>
         {errors.accept_terms && <p className="mt-2 text-xs text-danger">{errors.accept_terms}</p>}
       </div>
 
       {!masterDataReady && (
-        <p className="text-center text-sm text-slate-500">Loading departments and positions...</p>
+        <p className="text-center text-sm text-slate-500">विभाग और पद लोड हो रहे हैं...</p>
       )}
 
       <button type="submit" disabled={loading} className="btn-primary w-full">
-        {loading ? "Submitting..." : "Submit Registration"}
+        {loading ? "सबमिट हो रहा है..." : "पंजीकरण सबमिट करें"}
       </button>
 
       <p className="text-center text-sm text-neutral">
-        Already have an account?{" "}
+        पहले से खाता है?{" "}
         <Link href="/login" className="font-medium text-primary hover:underline">
-          Login
+          लॉगिन
         </Link>
       </p>
     </form>

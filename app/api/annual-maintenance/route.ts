@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { createAnnualMaintenancePayment, getAnnualMaintenanceSettings } from "@/lib/annual-maintenance";
+import { createAnnualMaintenancePayment, getAnnualMaintenanceSettings, updateAnnualMaintenancePayment, generateAnnualMaintenanceReceipt, buildAnnualMaintenanceReceiptNumber, findDuplicateTransactionNumber } from "@/lib/annual-maintenance";
+import { getUserProfileById } from "@/lib/db";
 import fs from "fs";
 import path from "path";
 
 export const dynamic = "force-dynamic";
+
+const DUPLICATE_PAYMENT_MESSAGE = "This UTR/Transaction Number has already been submitted. Please check the number or upload a different payment receipt.";
 
 export async function GET() {
   const { data, error } = await getAnnualMaintenanceSettings();
@@ -30,6 +33,15 @@ export async function POST(request: Request) {
 
   if (!transactionNumber) {
     return NextResponse.json({ success: false, message: "Transaction Number is required" }, { status: 400 });
+  }
+
+  const duplicateCheck = await findDuplicateTransactionNumber(transactionNumber);
+  if (duplicateCheck.exists) {
+    return NextResponse.json({
+      success: false,
+      message: DUPLICATE_PAYMENT_MESSAGE,
+      duplicate: true,
+    }, { status: 409 });
   }
 
   if (amount === null || Number.isNaN(amount) || amount <= 0) {
@@ -75,8 +87,58 @@ export async function POST(request: Request) {
     } catch {
       // ignore cleanup errors
     }
+
+    const errorMessage = String(error.message || "");
+    const isDuplicateConstraint =
+      error.code === "23505" ||
+      /duplicate key|unique constraint|already exists|already been submitted/i.test(errorMessage);
+
+    if (isDuplicateConstraint) {
+      return NextResponse.json({
+        success: false,
+        duplicate: true,
+        message: DUPLICATE_PAYMENT_MESSAGE,
+      }, { status: 409 });
+    }
+
     return NextResponse.json({ success: false, message: "Failed to save payment submission", details: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, item: data }, { status: 201 });
+  const { data: profile } = await getUserProfileById(auth.session.user.id);
+  const generatedReceipt = await generateAnnualMaintenanceReceipt(
+    {
+      id: data.id,
+      user_id: auth.session.user.id,
+      transaction_number: transactionNumber,
+      amount,
+      payment_date: paymentDate || null,
+      created_at: data.created_at,
+      receipt_number: buildAnnualMaintenanceReceiptNumber(data.id),
+    },
+    {
+      name: profile?.name ?? auth.session.user.name ?? null,
+      email: profile?.email ?? auth.session.user.email ?? null,
+      phone_number: profile?.phone_number ?? null,
+      district: profile?.district ?? null,
+      state: profile?.state ?? null,
+      village_city: profile?.village_city ?? null,
+      house_flat_no: profile?.house_flat_no ?? null,
+      street_locality: profile?.street_locality ?? null,
+      landmark: profile?.landmark ?? null,
+      pincode: profile?.pincode ?? null,
+      country: profile?.country ?? null,
+    },
+  );
+
+  const { error: updateError } = await updateAnnualMaintenancePayment(data.id, {
+    receipt_number: generatedReceipt.receipt_number,
+    generated_receipt_path: generatedReceipt.generated_receipt_path,
+    status: "approved",
+  });
+
+  if (updateError) {
+    return NextResponse.json({ success: false, message: "Payment was saved but the receipt could not be generated", details: updateError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, item: { ...data, receipt_number: generatedReceipt.receipt_number, generated_receipt_path: generatedReceipt.generated_receipt_path }, generatedReceipt }, { status: 201 });
 }

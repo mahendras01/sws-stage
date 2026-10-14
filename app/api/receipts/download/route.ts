@@ -25,10 +25,13 @@ export async function GET(request: Request) {
   const relPath = receipt.receipt_file_path ?? receipt.uploaded_file_path;
   if (!relPath) return NextResponse.json({ success: false, message: "No generated PDF available" }, { status: 404 });
 
-  const abs = path.join(process.cwd(), relPath);
-  // ensure path is inside new_payment_recipt directory to avoid path traversal
-  const allowedDir = path.join(process.cwd(), "new_payment_recipt");
-  if (!abs.startsWith(allowedDir)) {
+  const abs = path.resolve(process.cwd(), relPath);
+  const allowedDirs = [
+    path.resolve(process.cwd(), "private", "receipts"),
+    path.resolve(process.cwd(), "new_payment_recipt"),
+  ];
+  const isWithinAllowedDir = allowedDirs.some((allowedDir) => abs.startsWith(allowedDir + path.sep) || abs === allowedDir);
+  if (!isWithinAllowedDir) {
     return NextResponse.json({ success: false, message: "Invalid file path" }, { status: 400 });
   }
 
