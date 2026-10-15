@@ -38,7 +38,6 @@ venv/
 
 # database / migration files (kept local, not committed)
 *.sql
-/supabase/
 migrations/
 *migration*.sh
 *.dump
@@ -50,12 +49,19 @@ migrations/
 *.md
 
 # Local SWS runtime assets and historical backups (do not track)
-/private/
-/receipts/
-/annual_maintenance_receipts/
-/backups_pre_pg_migration/
-/supabase/
-/public/
+# Keep the folders in Git so they exist on clone, but ignore contents except .gitkeep
+/private/*
+!/private/.gitkeep
+/receipts/*
+!/receipts/.gitkeep
+/annual_maintenance_receipts/*
+!/annual_maintenance_receipts/.gitkeep
+/backups_pre_pg_migration/*
+!/backups_pre_pg_migration/.gitkeep
+/supabase/*
+!/supabase/.gitkeep
+
+# do not ignore public/ because Next.js needs static assets
 
 # User-generated SWS receipts and uploaded/generated assets
 /payment_receipt/
