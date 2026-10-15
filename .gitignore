@@ -49,6 +49,14 @@ migrations/
 # markdown documentation
 *.md
 
+# Local SWS runtime assets and historical backups (do not track)
+/private/
+/receipts/
+/annual_maintenance_receipts/
+/backups_pre_pg_migration/
+/supabase/
+/public/
+
 # User-generated SWS receipts and uploaded/generated assets
 /payment_receipt/
 /new_payment_recipt/
