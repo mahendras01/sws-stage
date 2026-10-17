@@ -4,7 +4,8 @@ import { requireAuth } from "@/lib/auth";
 import { createReceipt, getReceiptById, getReceiptByTransactionReference, getUserProfileById, getReceiptRecipientFilterOptions, getUserById, updateReceipt, deleteReceipt } from "@/lib/db";
 import { generateReceiptPdf } from "@/lib/pdf";
 import { getLogoFile } from "@/lib/site-logo";
-import { buildProfileAddress, extractPaymentDocumentData, normalizeReceiptReference, validateReceiptFile } from "@/lib/receipt-extraction";
+import { buildProfileAddress, computeFileHash, extractPaymentDocumentData, normalizeReceiptReference, normalizeReferenceValue, validateReceiptFile } from "@/lib/receipt-extraction";
+import { findDuplicateTransactionNumber } from "@/lib/annual-maintenance";
 import fs from "node:fs/promises";
 import crypto from "node:crypto";
 import path from "node:path";
@@ -69,6 +70,9 @@ export async function POST(request: Request) {
     const resolvedTransactionId = normalizeReceiptReference(transactionId, extracted.transactionId) || null;
     const resolvedUtr = normalizeReceiptReference(utr, extracted.utr) || null;
     const resolvedReference = normalizeReceiptReference(transactionNumber, resolvedTransactionId, resolvedUtr) || null;
+    const normalizedReference = normalizeReferenceValue(resolvedReference);
+    const normalizedUtr = normalizeReferenceValue(resolvedUtr);
+    const normalizedTransactionId = normalizeReferenceValue(resolvedTransactionId);
     const hasAmountConflict = extracted.amount !== null && Number.isFinite(resolvedAmount) && Math.abs(Number(extracted.amount) - Number(resolvedAmount)) > 0.01;
     const hasTransactionConflict = Boolean(extracted.transactionId && resolvedTransactionId && extracted.transactionId !== resolvedTransactionId);
     const needsManualReview = hasAmountConflict || hasTransactionConflict;
@@ -111,9 +115,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: "Transaction date is invalid." }, { status: 400 });
     }
 
-    const duplicateResult = await getReceiptByTransactionReference(resolvedReference);
-    if (duplicateResult.data) {
-      return NextResponse.json({ success: false, message: "This transaction reference, transaction ID, or UTR already exists for a previous receipt submission." }, { status: 409 });
+    const duplicateValues = [normalizedReference, normalizedUtr, normalizedTransactionId].filter((value): value is string => Boolean(value));
+    if (duplicateValues.length > 0) {
+      const duplicateResult = await getReceiptByTransactionReference(duplicateValues[0]);
+      if (duplicateResult.data) {
+        return NextResponse.json({ success: false, message: "This UTR / Transaction Number has already been used. Please check your receipt." }, { status: 409 });
+      }
+
+      const globalDuplicate = await findDuplicateTransactionNumber(duplicateValues[0]);
+      if (globalDuplicate.exists) {
+        return NextResponse.json({ success: false, message: "This UTR / Transaction Number has already been used. Please check your receipt." }, { status: 409 });
+      }
     }
 
     let receiptNumber: string;
@@ -129,6 +141,19 @@ export async function POST(request: Request) {
 
     const evidencePath = path.join(evidenceDir, safeFileName);
     const fileBuffer = Buffer.from(await file.arrayBuffer());
+    const fileHash = computeFileHash(fileBuffer);
+
+    const existingFileHashMatch = await queryRows<{ id: string }>(
+      `SELECT id FROM receipts WHERE file_hash = $1
+       UNION ALL
+       SELECT id FROM annual_maintenance_payments WHERE file_hash = $1
+       LIMIT 1`,
+      [fileHash],
+    );
+    if (existingFileHashMatch.length > 0) {
+      return NextResponse.json({ success: false, message: "This receipt image has already been uploaded. Please check the file and try a different copy." }, { status: 409 });
+    }
+
     await fs.writeFile(evidencePath, fileBuffer, { flag: "wx" });
 
     const relativeEvidencePath = path.relative(process.cwd(), evidencePath).split(path.sep).join("/");
@@ -152,6 +177,7 @@ export async function POST(request: Request) {
       file_path: relativeEvidencePath,
       file_type: fileValidation.mimeType || file.type || "application/octet-stream",
       file_size_bytes: file.size,
+      file_hash: fileHash,
       status: "uploaded",
       payment_provider: resolvedProvider,
       transaction_date: resolvedDate || null,
@@ -186,7 +212,7 @@ export async function POST(request: Request) {
       }
 
       if ((error as any)?.code === "23505" || /unique/.test(String((error as any)?.message ?? ""))) {
-        return NextResponse.json({ success: false, message: "This payment reference or receipt number is already in use." }, { status: 409 });
+        return NextResponse.json({ success: false, message: "This UTR / Transaction Number has already been used. Please check your receipt." }, { status: 409 });
       }
       return NextResponse.json({ success: false, message: "Failed to save the receipt record.", details: (error as any)?.message ?? null }, { status: 500 });
     }

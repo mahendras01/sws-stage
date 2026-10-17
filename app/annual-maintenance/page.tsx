@@ -70,18 +70,19 @@ export default function AnnualMaintenancePage() {
       return;
     }
 
-    if (!form.transactionNumber || !form.amount || !form.receipt) {
+    const transactionNumber = form.transactionNumber.trim();
+    if (!transactionNumber || !form.amount || !form.receipt) {
       setMessage({ type: "error", text: "Transaction Number, amount, and payment receipt are required." });
       return;
     }
 
     try {
-      const duplicateCheck = await fetch(`/api/annual-maintenance/check-duplicate?transactionNumber=${encodeURIComponent(form.transactionNumber)}`);
+      const duplicateCheck = await fetch(`/api/annual-maintenance/check-duplicate?transactionNumber=${encodeURIComponent(transactionNumber)}`);
       const duplicateJson = await readJsonResponse(duplicateCheck);
       if (!duplicateCheck.ok || duplicateJson?.duplicate) {
         setMessage({
           type: "error",
-          text: duplicateJson?.message || "This UTR/Transaction Number has already been submitted. Please check the number or upload a different payment receipt.",
+          text: duplicateJson?.message || "This UTR / Transaction Number has already been used. Please check your receipt.",
         });
         return;
       }
@@ -91,8 +92,8 @@ export default function AnnualMaintenancePage() {
     }
 
     const fd = new FormData();
-    fd.append("transactionNumber", form.transactionNumber);
-    fd.append("amount", form.amount);
+    fd.append("transactionNumber", transactionNumber);
+    fd.append("amount", form.amount.trim());
     if (form.paymentDate) fd.append("paymentDate", form.paymentDate);
     if (form.notes) fd.append("notes", form.notes);
     fd.append("receipt", form.receipt);

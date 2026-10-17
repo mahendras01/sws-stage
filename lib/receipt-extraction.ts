@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -426,12 +427,25 @@ export function canonicalizeReceiptReference(value: string | null, fallbackValue
   return candidate || null;
 }
 
+export function normalizeReferenceValue(value: string | null | undefined) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.toLowerCase();
+}
+
 export function normalizeReceiptReference(...values: Array<string | null | undefined>) {
   const normalized = values
     .map((value) => String(value ?? "").trim())
     .filter((value) => value.length > 0);
 
   return normalized.length > 0 ? normalized[0] : null;
+}
+
+export function computeFileHash(buffer: Buffer | Uint8Array) {
+  return crypto.createHash("sha256").update(Buffer.from(buffer)).digest("hex");
 }
 
 export function safeDisplayString(value: string | null | undefined) {

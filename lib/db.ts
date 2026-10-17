@@ -1018,10 +1018,17 @@ export async function getReceiptByTransactionReference(reference: string) {
     return { data: null, error: null };
   }
 
+  const lowered = normalized.toLowerCase();
+
   try {
     const rows = await queryRows(
-      "SELECT * FROM receipts WHERE transaction_number = $1 OR transaction_id = $1 OR (transaction_utr IS NOT NULL AND transaction_utr = $1) LIMIT 1",
-      [normalized],
+      `SELECT *
+       FROM receipts
+       WHERE LOWER(COALESCE(transaction_number, '')) = $1
+          OR LOWER(COALESCE(transaction_id, '')) = $1
+          OR (transaction_utr IS NOT NULL AND LOWER(COALESCE(transaction_utr, '')) = $1)
+       LIMIT 1`,
+      [lowered],
     );
     return { data: rows[0] ?? null, error: null };
   } catch (error) {

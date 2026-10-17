@@ -147,6 +147,7 @@ export async function createAnnualMaintenancePayment(payload: {
   receiptPath?: string | null;
   receiptName?: string | null;
   notes?: string | null;
+  fileHash?: string | null;
 }) {
   try {
     const rows = await queryRows(
@@ -159,9 +160,10 @@ export async function createAnnualMaintenancePayment(payload: {
         payment_receipt_path,
         payment_receipt_name,
         notes,
+        file_hash,
         status
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *`,
       [
         "ANNUAL_MAINTENANCE",
@@ -172,6 +174,7 @@ export async function createAnnualMaintenancePayment(payload: {
         payload.receiptPath ?? null,
         payload.receiptName ?? null,
         payload.notes?.trim() || null,
+        payload.fileHash ?? null,
         "pending",
       ],
     );
@@ -241,6 +244,30 @@ export async function getAnnualMaintenancePaymentByUser(userId: string) {
   }
 }
 
+export async function getAnnualMaintenancePaymentByTransaction(userId: string, transactionNumber: string) {
+  const normalized = normalizeTransactionReference(transactionNumber);
+  if (!normalized) {
+    return { data: null, error: null };
+  }
+
+  try {
+    const rows = await queryRows<any>(
+      `SELECT *
+       FROM annual_maintenance_payments
+       WHERE payment_category = 'ANNUAL_MAINTENANCE'
+         AND user_id = $1
+         AND LOWER(transaction_number) = $2
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId, normalized],
+    );
+
+    return { data: rows[0] ?? null, error: null };
+  } catch (error) {
+    return { data: null, error: toDbError(error) };
+  }
+}
+
 export async function getAnnualMaintenancePaymentById(paymentId: string) {
   try {
     const rows = await queryRows<any>(
@@ -289,6 +316,25 @@ export function buildAnnualMaintenanceReceiptNumber(paymentId: string) {
   const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
   const shortId = String(paymentId).replace(/-/g, "").slice(0, 8).toUpperCase();
   return `AM-REC-${dateStamp}-${shortId}`;
+}
+
+export async function ensureAnnualMaintenanceReceiptRecord(paymentId: string, receiptNumber: string, generatedReceiptPath: string) {
+  try {
+    const rows = await queryRows<any>(
+      `UPDATE annual_maintenance_payments
+       SET receipt_number = COALESCE(receipt_number, $1),
+           generated_receipt_path = COALESCE(generated_receipt_path, $2),
+           status = CASE WHEN status = 'pending' THEN 'approved' ELSE status END,
+           updated_at = NOW()
+       WHERE id = $3 AND payment_category = 'ANNUAL_MAINTENANCE'
+       RETURNING *`,
+      [receiptNumber, generatedReceiptPath, paymentId],
+    );
+
+    return { data: rows[0] ?? null, error: null };
+  } catch (error) {
+    return { data: null, error: toDbError(error) };
+  }
 }
 
 export async function generateAnnualMaintenanceReceipt(payment: {

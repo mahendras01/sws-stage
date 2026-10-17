@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { extractPaymentFieldsFromText, isWorkerBasedReceiptParsingEnabled, normalizeReceiptReference, validateReceiptFile } from "../lib/receipt-extraction.ts";
+import { computeFileHash, extractPaymentFieldsFromText, isWorkerBasedReceiptParsingEnabled, normalizeReceiptReference, normalizeReferenceValue, validateReceiptFile } from "../lib/receipt-extraction.ts";
 import { normalizeTransactionReference, findDuplicateTransactionNumber } from "../lib/annual-maintenance.ts";
 import { ensurePdfKitFontDataFiles } from "../lib/pdf.ts";
 
@@ -80,6 +80,19 @@ test("normalizeReceiptReference prefers the first non-empty reference", () => {
   assert.equal(normalizeReceiptReference("  ", "TXN-8842", "UTR-2215"), "TXN-8842");
   assert.equal(normalizeReceiptReference("", null, "UTR-9988"), "UTR-9988");
   assert.equal(normalizeReceiptReference("", "", ""), null);
+});
+
+test("normalizeReferenceValue trims and lowercases payment references", () => {
+  assert.equal(normalizeReferenceValue("  UTR-123  "), "utr-123");
+  assert.equal(normalizeReferenceValue("   "), null);
+  assert.equal(normalizeReferenceValue("A/B-C"), "a/b-c");
+});
+
+test("computeFileHash deterministically fingerprints uploaded bytes", () => {
+  const digest = computeFileHash(Buffer.from("same bytes same hash"));
+  assert.equal(digest, "ee89a95bdd5eb47f929bd3bf84d951a03f5c40b097c1a09d5de5e8fbfcdbc7f7");
+  assert.equal(computeFileHash(Buffer.from("same bytes same hash")), digest);
+  assert.notEqual(computeFileHash(Buffer.from("other bytes")), digest);
 });
 
 test("validateReceiptFile rejects non-payment files", async () => {
