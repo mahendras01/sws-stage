@@ -6,21 +6,34 @@ import path from "path";
 
 export const dynamic = "force-dynamic";
 
+const ACCEPTED_QR_TYPES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"]);
+const MAX_QR_BYTES = 2 * 1024 * 1024;
+
 function toText(value: FormDataEntryValue | null | undefined) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function normalizeQrPublicUrl(value?: string | null) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("/")) return trimmed;
+  if (trimmed.startsWith("annual-maintenance/")) return `/${trimmed}`;
+  return `/${trimmed.replace(/^\/+/, "")}`;
+}
+
 async function saveQrImage(file: File | null, existingQrUrl?: string | null) {
   if (!file || !(file instanceof File)) {
-    return existingQrUrl ?? null;
+    return normalizeQrPublicUrl(existingQrUrl) ?? null;
   }
 
-  const allowedTypes = ["image/png", "image/jpeg", "image/jpg"];
-  if (!allowedTypes.includes(file.type)) {
-    throw new Error("QR code must be a PNG or JPG image.");
+  const fileType = file.type?.toLowerCase();
+  if (!ACCEPTED_QR_TYPES.has(fileType)) {
+    throw new Error("QR code must be a PNG, JPG, JPEG, or WebP image.");
   }
 
-  if (file.size > 2 * 1024 * 1024) {
+  if (file.size > MAX_QR_BYTES) {
     throw new Error("QR code is too large. Maximum size is 2MB.");
   }
 
@@ -31,8 +44,9 @@ async function saveQrImage(file: File | null, existingQrUrl?: string | null) {
   const finalPath = path.join(uploadDir, cleanName);
   await fs.promises.writeFile(finalPath, Buffer.from(await file.arrayBuffer()));
 
-  if (existingQrUrl && existingQrUrl.startsWith("/annual-maintenance/")) {
-    const oldFilePath = path.join(process.cwd(), "public", existingQrUrl.replace(/^\/+/, ""));
+  const normalizedExistingUrl = normalizeQrPublicUrl(existingQrUrl);
+  if (normalizedExistingUrl && normalizedExistingUrl.startsWith("/annual-maintenance/")) {
+    const oldFilePath = path.join(process.cwd(), "public", normalizedExistingUrl.replace(/^\/+/, ""));
     try {
       await fs.promises.unlink(oldFilePath);
     } catch {

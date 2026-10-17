@@ -19,6 +19,19 @@ type Settings = {
   is_active?: boolean;
 };
 
+const ACCEPTED_QR_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+const MAX_QR_BYTES = 2 * 1024 * 1024;
+
+function toQrImageSrc(value?: string | null) {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("/")) return trimmed;
+  if (trimmed.startsWith("annual-maintenance/")) return `/${trimmed}`;
+  return `/annual-maintenance/${trimmed.replace(/^\/+/, "")}`;
+}
+
 const emptySettings: Settings = {
   fee_amount: "",
   qr_code_url: "",
@@ -37,6 +50,7 @@ export default function AnnualMaintenanceSettingsPage() {
   const router = useRouter();
   const [form, setForm] = useState<Settings>(emptySettings);
   const [qrFile, setQrFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -66,6 +80,49 @@ export default function AnnualMaintenanceSettingsPage() {
       })
       .catch(() => {});
   }, [status, session, canManage, router]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  const resetQrSelection = () => {
+    setQrFile(null);
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
+  };
+
+  const handleQrSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setError("");
+    const selected = event.target.files?.[0] ?? null;
+    if (!selected) {
+      resetQrSelection();
+      return;
+    }
+
+    if (!ACCEPTED_QR_TYPES.includes(selected.type)) {
+      setError("QR code must be a PNG, JPG, JPEG, or WebP image.");
+      resetQrSelection();
+      event.target.value = "";
+      return;
+    }
+
+    if (selected.size > MAX_QR_BYTES) {
+      setError("QR code is too large. Maximum size is 2 MB.");
+      resetQrSelection();
+      event.target.value = "";
+      return;
+    }
+
+    setQrFile(selected);
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return URL.createObjectURL(selected);
+    });
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -126,8 +183,14 @@ export default function AnnualMaintenanceSettingsPage() {
         throw new Error(json.message || "Failed to save settings");
       }
 
+      const savedQrUrl = json.settings?.qr_code_url ?? form.qr_code_url ?? null;
+      setForm((prev) => ({
+        ...prev,
+        ...json.settings,
+        qr_code_url: savedQrUrl,
+      }));
       setSuccess("Annual Maintenance payment settings updated successfully.");
-      setQrFile(null);
+      resetQrSelection();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save settings");
     } finally {
@@ -182,14 +245,19 @@ export default function AnnualMaintenanceSettingsPage() {
             <span>QR Code Image Upload</span>
             <input
               type="file"
-              accept="image/png,image/jpeg,image/jpg"
-              onChange={(e) => setQrFile(e.target.files?.[0] ?? null)}
+              accept="image/png,image/jpeg,image/jpg,image/webp"
+              onChange={handleQrSelection}
               className="w-full rounded-lg border border-slate-200 px-3 py-2"
             />
-            {form.qr_code_url && !qrFile && (
+            {(previewUrl || form.qr_code_url) && (
               <div className="mt-2 flex items-center gap-3">
-                <img src={form.qr_code_url} alt="Current QR Code" className="h-20 w-20 rounded-lg border bg-slate-50 object-contain" />
-                <span className="text-xs text-slate-500">Current QR code on file</span>
+                <img
+                  src={previewUrl || toQrImageSrc(form.qr_code_url)}
+                  alt="Current QR Code"
+                  className="h-20 w-20 rounded-lg border bg-slate-50 object-contain"
+                  onError={() => setError("QR code image could not be loaded. Please upload a valid PNG, JPG, JPEG, or WebP file.")}
+                />
+                <span className="text-xs text-slate-500">{previewUrl ? "New QR code preview" : "Current QR code on file"}</span>
               </div>
             )}
           </label>
