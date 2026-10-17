@@ -53,38 +53,6 @@ export async function generateReceiptPdf(receipt: ReceiptData, user: UserData, o
 
 function createPdfAtPath(fullPath: string, receipt: ReceiptData, user: UserData, options?: PdfOptions) {
   return new Promise<string>((resolve, reject) => {
-    try {
-      const pdfkitMain = require.resolve("pdfkit");
-      const candidateDataDirs = [
-        path.join(process.cwd(), "node_modules", "pdfkit", "js", "data"),
-        path.join(path.dirname(pdfkitMain), "js", "data"),
-        path.join(path.dirname(pdfkitMain), "data"),
-      ];
-
-      const targetDataDir = path.join(process.cwd(), ".next", "server", "vendor-chunks", "data");
-      try {
-        if (!fs.existsSync(targetDataDir)) fs.mkdirSync(targetDataDir, { recursive: true });
-        for (const cand of candidateDataDirs) {
-          try {
-            if (!fs.existsSync(cand)) continue;
-            for (const file of fs.readdirSync(cand)) {
-              const src = path.join(cand, file);
-              const dst = path.join(targetDataDir, file);
-              if (!fs.existsSync(dst)) {
-                fs.copyFileSync(src, dst);
-              }
-            }
-          } catch {
-            // ignore
-          }
-        }
-      } catch {
-        // ignore
-      }
-    } catch {
-      // ignore
-    }
-
     const doc = new PDFDocument({ size: "A4", margin: 48 });
     const stream = fs.createWriteStream(fullPath, { flags: "wx" });
 
