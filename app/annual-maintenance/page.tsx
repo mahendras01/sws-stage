@@ -17,6 +17,29 @@ type Settings = {
   notes?: string | null;
 };
 
+async function readJsonResponse(res: Response) {
+  const rawText = await res.text();
+  if (!rawText) {
+    return { success: false, message: `Request failed with status ${res.status}.` };
+  }
+
+  try {
+    return JSON.parse(rawText);
+  } catch (error) {
+    console.error("Invalid JSON response from annual-maintenance API", {
+      status: res.status,
+      contentType: res.headers.get("content-type"),
+      bodyPreview: rawText.slice(0, 200),
+      error,
+    });
+
+    return {
+      success: false,
+      message: "The server returned an invalid response. Please refresh and try again.",
+    };
+  }
+}
+
 export default function AnnualMaintenancePage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -33,8 +56,10 @@ export default function AnnualMaintenancePage() {
 
   useEffect(() => {
     fetch("/api/annual-maintenance")
-      .then((res) => res.json())
-      .then((json) => setSettings(json.settings ?? null))
+      .then(async (res) => {
+        const json = await readJsonResponse(res);
+        setSettings(json?.settings ?? null);
+      })
       .catch(() => setSettings(null));
   }, []);
 
@@ -52,7 +77,7 @@ export default function AnnualMaintenancePage() {
 
     try {
       const duplicateCheck = await fetch(`/api/annual-maintenance/check-duplicate?transactionNumber=${encodeURIComponent(form.transactionNumber)}`);
-      const duplicateJson = await duplicateCheck.json();
+      const duplicateJson = await readJsonResponse(duplicateCheck);
       if (!duplicateCheck.ok || duplicateJson?.duplicate) {
         setMessage({
           type: "error",
@@ -80,7 +105,7 @@ export default function AnnualMaintenancePage() {
         method: "POST",
         body: fd,
       });
-      const json = await res.json();
+      const json = await readJsonResponse(res);
 
       if (!res.ok || !json.success) {
         throw new Error(json.message || "Unable to submit payment details");

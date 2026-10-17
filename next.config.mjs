@@ -1,6 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  generateBuildId: async () => {
+    const id =
+      process.env.BUILD_ID ||
+      process.env.GITHUB_SHA ||
+      process.env.SOURCE_VERSION ||
+      `${Date.now()}`;
+
+    return `sws-${id}`;
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**" },

@@ -57,6 +57,21 @@ export default function AnnualMaintenanceSettingsPage() {
 
   const canManage = ["super_admin", "country_co_admin"].includes(session?.user?.role ?? "");
 
+  const loadSettings = async () => {
+    try {
+      const res = await fetch("/api/admin/annual-maintenance-settings", { cache: "no-store" });
+      const json = await res.json();
+      if (json.settings) {
+        setForm({
+          ...emptySettings,
+          ...json.settings,
+        });
+      }
+    } catch {
+      // Ignore fetch errors here; the form can still be edited and saved.
+    }
+  };
+
   useEffect(() => {
     if (status === "loading") return;
     if (!session?.user) {
@@ -68,17 +83,7 @@ export default function AnnualMaintenanceSettingsPage() {
       return;
     }
 
-    fetch("/api/admin/annual-maintenance-settings")
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.settings) {
-          setForm({
-            ...emptySettings,
-            ...json.settings,
-          });
-        }
-      })
-      .catch(() => {});
+    void loadSettings();
   }, [status, session, canManage, router]);
 
   useEffect(() => {
@@ -126,6 +131,7 @@ export default function AnnualMaintenanceSettingsPage() {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    event.stopPropagation();
     setSaving(true);
     setError("");
     setSuccess("");
@@ -190,7 +196,12 @@ export default function AnnualMaintenanceSettingsPage() {
         qr_code_url: savedQrUrl,
       }));
       setSuccess("Annual Maintenance payment settings updated successfully.");
-      resetQrSelection();
+      setQrFile(null);
+      setPreviewUrl((current) => {
+        if (current) URL.revokeObjectURL(current);
+        return null;
+      });
+      await loadSettings();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save settings");
     } finally {
