@@ -34,6 +34,38 @@ type UserData = {
 
 type PdfOptions = { logoPath?: string; logoBuffer?: Buffer };
 
+export function ensurePdfKitFontDataFiles(): string[] {
+  const sourceDataDir = path.join(process.cwd(), "node_modules", "pdfkit", "js", "data");
+  if (!fs.existsSync(sourceDataDir)) {
+    return [];
+  }
+
+  const targetDirs = [
+    path.join(process.cwd(), ".next", "server", "chunks", "data"),
+    path.join(process.cwd(), ".next", "server", "data"),
+    path.join(process.cwd(), ".next", "standalone", "server", "chunks", "data"),
+    path.join(process.cwd(), ".next", "standalone", "server", "data"),
+  ];
+
+  const copiedFiles: string[] = [];
+  for (const targetDir of targetDirs) {
+    fs.mkdirSync(targetDir, { recursive: true });
+
+    for (const fileName of fs.readdirSync(sourceDataDir)) {
+      if (!fileName.endsWith(".afm")) continue;
+
+      const sourceFile = path.join(sourceDataDir, fileName);
+      const targetFile = path.join(targetDir, fileName);
+      if (!fs.existsSync(targetFile) || fs.statSync(sourceFile).mtimeMs > fs.statSync(targetFile).mtimeMs) {
+        fs.copyFileSync(sourceFile, targetFile);
+      }
+      copiedFiles.push(targetFile);
+    }
+  }
+
+  return copiedFiles;
+}
+
 function asDisplay(value: unknown) {
   if (value === null || value === undefined) return "-";
   const text = String(value).trim();
@@ -41,6 +73,8 @@ function asDisplay(value: unknown) {
 }
 
 export async function generateReceiptPdf(receipt: ReceiptData, user: UserData, options?: PdfOptions) {
+  ensurePdfKitFontDataFiles();
+
   const outDir = path.join(process.cwd(), "private", "receipts", "pdf");
   await fs.promises.mkdir(outDir, { recursive: true });
 

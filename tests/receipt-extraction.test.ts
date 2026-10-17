@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 import { extractPaymentFieldsFromText, isWorkerBasedReceiptParsingEnabled, normalizeReceiptReference, validateReceiptFile } from "../lib/receipt-extraction.ts";
 import { normalizeTransactionReference, findDuplicateTransactionNumber } from "../lib/annual-maintenance.ts";
+import { ensurePdfKitFontDataFiles } from "../lib/pdf.ts";
 
 test("extractPaymentFieldsFromText parses a PhonePe receipt snapshot", () => {
   const sample = `
@@ -102,6 +105,23 @@ test("normalizeTransactionReference trims and lowercases references", () => {
   assert.equal(normalizeTransactionReference(" UTR-123 " ), "utr-123");
   assert.equal(normalizeTransactionReference(""), null);
   assert.equal(normalizeTransactionReference(null), null);
+});
+
+test("ensurePdfKitFontDataFiles restores the AFM files needed by PDFKit in production builds", () => {
+  const targets = [
+    path.join(process.cwd(), ".next", "server", "chunks", "data"),
+    path.join(process.cwd(), ".next", "server", "data"),
+  ];
+
+  for (const target of targets) {
+    if (fs.existsSync(target)) {
+      fs.rmSync(target, { recursive: true, force: true });
+    }
+  }
+
+  const copied = ensurePdfKitFontDataFiles();
+  assert.ok(copied.length > 0, "expected PDFKit font files to be restored");
+  assert.ok(copied.some((file) => file.endsWith("Helvetica.afm")), "expected Helvetica.afm to be available");
 });
 
 test("findDuplicateTransactionNumber reports duplicates and accepts unique references", async () => {
