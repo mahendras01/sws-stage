@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { getDefaultNewUserStatus } from "@/lib/auth-flow";
 import { calculateMembershipExpiryDate, validateSignup } from "@/lib/validation";
 import {
   createUser,
@@ -264,7 +265,7 @@ export async function POST(request: NextRequest) {
       permanent_state: body.permanent_same_as_current ? state : (body.permanent_state ?? "").trim(),
       permanent_pincode: body.permanent_same_as_current ? pincode : (body.permanent_pincode ?? "").trim(),
       permanent_country: body.permanent_same_as_current ? country : (body.permanent_country ?? "India").trim() || "India",
-      status: "pending",
+      status: getDefaultNewUserStatus(),
     });
 
     if (error || !data) {
@@ -281,7 +282,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "पंजीकरण सफल हुआ। व्यवस्थापक की मंजूरी का इंतजार है।",
+      message: "पंजीकरण सफल हुआ। आप अभी लॉगिन कर सकते हैं।",
       user: { id: data.id, email: data.email, status: data.status },
     });
   } catch (error) {

@@ -27,7 +27,7 @@ export default async function Header() {
 
         <div className="flex flex-col items-start gap-1 text-[0.95rem] leading-tight text-slate-700 sm:items-end sm:text-base">
           <a href="tel:+917080329999" className="font-semibold text-blue-800 transition hover:text-blue-700">
-            <span className="font-semibold text-slate-700">Helpline Number:</span>{" "}
+            <span className="font-semibold text-slate-700">मोबाइल नंबर:</span>{" "}
             <span className="font-bold text-blue-900">+91-7080329999</span>
           </a>
           <div className="font-medium text-slate-700">

@@ -1,6 +1,7 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+import { canUserLogin } from "./auth-flow";
 import { queryRows } from "./postgres";
 import { log, newRequestId, summarizeUser } from "./logger";
 
@@ -73,12 +74,7 @@ export const authOptions: NextAuthOptions = {
 
         const userSummary = summarizeUser(user);
 
-        if (user.status === "pending") {
-          log.warn("auth.login.failed", { requestId, ip, reason: "pending_approval", user: userSummary });
-          throw new Error("Your account is pending admin approval");
-        }
-
-        if (user.status === "rejected") {
+        if (!canUserLogin(user.status)) {
           log.warn("auth.login.failed", { requestId, ip, reason: "account_rejected", user: userSummary });
           throw new Error("Your account has been rejected");
         }

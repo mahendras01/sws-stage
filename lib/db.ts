@@ -733,7 +733,7 @@ export async function createContribution(contributionData: Record<string, unknow
 export async function getUserById(userId: string) {
   try {
     const rows = await queryRows(
-      "SELECT id, name, email, status, is_active, district, phone_number, ehrms_code, role_number, aadhar_number, pan_number, nominee_aadhar_number, bank_account_number, bank_ifsc_code, bank_holder_name, house_flat_no, street_locality, landmark, village_city, state, pincode, country FROM users WHERE id = $1",
+      "SELECT id, name, email, status, is_active, district, phone_number, ehrms_code, role_number, aadhar_number, pan_number, nominee_aadhar_number, nominee_edit_allowed, bank_account_number, bank_ifsc_code, bank_holder_name, house_flat_no, street_locality, landmark, village_city, state, pincode, country FROM users WHERE id = $1",
       [userId],
     );
     if (rows.length === 0) {
@@ -806,7 +806,7 @@ export async function getReceiptRecipientFilterOptions(options?: { district?: st
 export async function getUserProfileById(userId: string) {
   try {
     const rows = await queryRows<Partial<User>>(
-      `SELECT id, email, name, aadhar_number, pan_number, date_of_birth, ehrms_code, role_number, gender, father_husband_name, department_id, post_id, nominee_name, nominee_relationship, nominee_mobile_number, nominee_aadhar_number, bank_account_number, bank_ifsc_code, bank_holder_name, phone_number, house_flat_no, street_locality, landmark, village_city, district, state, pincode, country, role, status, is_admin, created_at, updated_at
+      `SELECT id, email, name, aadhar_number, pan_number, date_of_birth, ehrms_code, role_number, gender, father_husband_name, department_id, post_id, nominee_name, nominee_relationship, nominee_mobile_number, nominee_aadhar_number, bank_account_number, bank_ifsc_code, bank_holder_name, phone_number, house_flat_no, street_locality, landmark, village_city, district, state, pincode, country, nominee_edit_allowed, role, status, is_admin, created_at, updated_at
        FROM users
        WHERE id = $1`,
       [userId],
@@ -822,6 +822,185 @@ export async function getUserProfileById(userId: string) {
   }
 }
 
+export async function getUserPendingNomineeRequest(userId: string) {
+  try {
+    const rows = await queryRows<any>(
+      `SELECT *
+       FROM nominee_edit_requests
+       WHERE user_id = $1 AND status = 'pending'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId],
+    );
+
+    return { data: rows[0] ?? null, error: null };
+  } catch (error) {
+    return { data: null, error: toDbError(error) };
+  }
+}
+
+export async function getNomineeEditRequestById(requestId: string) {
+  try {
+    const rows = await queryRows<any>(
+      `SELECT r.*, u.name AS user_name, u.email AS user_email, u.ehrms_code, u.role_number
+       FROM nominee_edit_requests r
+       LEFT JOIN users u ON u.id = r.user_id
+       WHERE r.id = $1
+       LIMIT 1`,
+      [requestId],
+    );
+
+    return { data: rows[0] ?? null, error: null };
+  } catch (error) {
+    return { data: null, error: toDbError(error) };
+  }
+}
+
+export async function createNomineeEditRequest(
+  userId: string,
+  data: {
+    reason: string;
+    notePath: string;
+    noteFileName: string;
+    noteMimeType: string;
+    noteSizeBytes: number;
+    nomineeName?: string | null;
+    nomineeRelationship?: string | null;
+    nomineeMobileNumber?: string | null;
+    nomineeAadharNumber?: string | null;
+    nominee2Relationship?: string | null;
+    nominee2MobileNumber?: string | null;
+  },
+) {
+  try {
+    const rows = await queryRows<any>(
+      `INSERT INTO nominee_edit_requests (
+        user_id,
+        requested_by,
+        reason,
+        note_path,
+        note_file_name,
+        note_mime_type,
+        note_size_bytes,
+        nominee_name,
+        nominee_relationship,
+        nominee_mobile_number,
+        nominee_aadhar_number,
+        nominee2_relationship,
+        nominee2_mobile_number,
+        status,
+        reviewed_by,
+        admin_note,
+        reviewed_at,
+        created_at,
+        updated_at
+      )
+       VALUES (
+         $1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending', NULL, NULL, NULL, NOW(), NOW()
+       )
+       RETURNING *`,
+      [
+        userId,
+        data.reason,
+        data.notePath,
+        data.noteFileName,
+        data.noteMimeType,
+        data.noteSizeBytes,
+        data.nomineeName ?? null,
+        data.nomineeRelationship ?? null,
+        data.nomineeMobileNumber ?? null,
+        data.nomineeAadharNumber ?? null,
+        data.nominee2Relationship ?? null,
+        data.nominee2MobileNumber ?? null,
+      ],
+    );
+
+    return { data: rows[0] ?? null, error: null };
+  } catch (error) {
+    return { data: null, error: toDbError(error) };
+  }
+}
+
+export async function listNomineeEditRequests() {
+  try {
+    const rows = await queryRows<{ id: string; user_id: string; reason: string; note_path: string; note_file_name: string; note_mime_type: string; note_size_bytes: number; status: string; created_at: string; updated_at: string; user_name: string; user_email: string; ehrms_code: string | null; role_number: string | null }>(
+      `SELECT r.*, u.name AS user_name, u.email AS user_email, u.ehrms_code, u.role_number
+       FROM nominee_edit_requests r
+       LEFT JOIN users u ON u.id = r.user_id
+       ORDER BY r.created_at DESC`,
+    );
+
+    return { data: rows, error: null };
+  } catch (error) {
+    return { data: null, error: toDbError(error) };
+  }
+}
+
+export async function updateNomineeEditRequestStatus(requestId: string, status: "approved" | "rejected", adminUserId: string, adminNote = "") {
+  try {
+    const rows = await queryRows<any>(
+      `UPDATE nominee_edit_requests
+       SET status = $1,
+           reviewed_by = $2,
+           admin_note = $3,
+           reviewed_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $4
+       RETURNING *`,
+      [status, adminUserId, adminNote, requestId],
+    );
+
+    if (rows.length === 0) {
+      return { data: null, error: missingSingleRowError("Nominee edit request") };
+    }
+
+    const request = rows[0];
+    if (status === "approved") {
+      const nomineeValues: Record<string, unknown> = {
+        nominee_name: request.nominee_name,
+        nominee_relationship: request.nominee_relationship,
+        nominee_mobile_number: request.nominee_mobile_number,
+        nominee_aadhar_number: request.nominee_aadhar_number,
+        nominee2_relationship: request.nominee2_relationship,
+        nominee2_mobile_number: request.nominee2_mobile_number,
+      };
+
+      const validEntries = Object.entries(nomineeValues).filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "");
+      if (validEntries.length > 0) {
+        const { setClause, values } = buildUpdate(Object.fromEntries(validEntries));
+        await queryRows(
+          `UPDATE users
+           SET ${setClause},
+               nominee_edit_allowed = TRUE,
+               updated_at = NOW()
+           WHERE id = $${values.length + 1}`,
+          [...values, request.user_id],
+        );
+      } else {
+        await queryRows(
+          `UPDATE users
+           SET nominee_edit_allowed = TRUE,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [request.user_id],
+        );
+      }
+    } else {
+      await queryRows(
+        `UPDATE users
+         SET nominee_edit_allowed = FALSE,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [request.user_id],
+      );
+    }
+
+    return { data: request, error: null };
+  } catch (error) {
+    return { data: null, error: toDbError(error) };
+  }
+}
+
 export async function updateUserProfile(userId: string, updates: Record<string, unknown>) {
   try {
     const { setClause, values } = buildUpdate(updates);
@@ -829,7 +1008,7 @@ export async function updateUserProfile(userId: string, updates: Record<string, 
       `UPDATE users
        SET ${setClause}
        WHERE id = $${values.length + 1}
-       RETURNING id, email, name, aadhar_number, pan_number, date_of_birth, ehrms_code, role_number, gender, father_husband_name, department_id, post_id, nominee_name, nominee_relationship, nominee_mobile_number, nominee_aadhar_number, bank_account_number, bank_ifsc_code, bank_holder_name, phone_number, house_flat_no, street_locality, landmark, village_city, district, state, pincode, country, role, status, is_admin, created_at, updated_at`,
+       RETURNING id, email, name, aadhar_number, pan_number, date_of_birth, ehrms_code, role_number, gender, father_husband_name, department_id, post_id, nominee_name, nominee_relationship, nominee_mobile_number, nominee_aadhar_number, bank_account_number, bank_ifsc_code, bank_holder_name, phone_number, house_flat_no, street_locality, landmark, village_city, district, state, pincode, country, nominee_edit_allowed, role, status, is_admin, created_at, updated_at`,
       [...values, userId],
     );
 

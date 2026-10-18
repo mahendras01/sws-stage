@@ -153,6 +153,7 @@ export default function SignupForm() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState<SignupFormState>(initialFormState);
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [posts, setPosts] = useState<PostOption[]>([]);
@@ -381,7 +382,7 @@ export default function SignupForm() {
         </div>
         <h2 className="text-xl font-bold text-gray-900">पंजीकरण सफल</h2>
         <p className="mt-2 text-neutral">
-          व्यवस्थापक की मंजूरी का इंतजार है। आपके खाते की मंजूरी होने पर आप लॉगिन कर सकेंगे।
+          पंजीकरण सफल हुआ। अब आप लॉगिन कर सकते हैं।
         </p>
         <Link href="/login" className="btn-primary mt-6 inline-block">
           लॉगिन पर जाएँ
@@ -415,11 +416,14 @@ export default function SignupForm() {
     { name: "nominee_name", label: "नॉमिनी का नाम", type: "text", placeholder: "नॉमिनी का नाम दर्ज करें" },
     { name: "nominee_relationship", label: "नॉमिनी से संबंध", type: "text", placeholder: "संबंध दर्ज करें" },
     { name: "nominee_mobile_number", label: "नॉमिनी का मोबाइल नंबर", type: "tel", placeholder: "10 अंकों का नंबर" },
-    { name: "reference_name", label: "संदर्भ नाम (कौन आपको पंजीकरण के लिए लेकर आया?)", type: "text", placeholder: "यदि कोई हो तो संदर्भ नाम दर्ज करें" },
-    { name: "pincode", label: "पिन कोड", type: "text", placeholder: "6 अंकों का कोड", inputMode: "numeric" },
-    { name: "village_city", label: "ब्लॉक / गाँव / शहर", type: "text", placeholder: "ब्लॉक, गाँव या शहर दर्ज करें" },
-    { name: "district", label: "जिला", type: "text", placeholder: "जिला दर्ज करें" },
   ] as const;
+
+  const referenceField: FieldConfig = {
+    name: "reference_name",
+    label: "संदर्भ नाम (कौन आपको पंजीकरण के लिए लेकर आया?)",
+    type: "text",
+    placeholder: "यदि कोई हो तो संदर्भ नाम दर्ज करें",
+  };
 
   const currentAddressFields: FieldConfig[] = [
     { name: "house_flat_no", label: "मकान/फ्लैट नंबर", type: "text", placeholder: "मकान या फ्लैट नंबर दर्ज करें", fullWidth: true },
@@ -493,22 +497,59 @@ export default function SignupForm() {
       );
     }
 
+    const isPasswordField = field.name === "password" && field.type === "password";
+
     return (
       <div key={field.name} className={field.fullWidth ? "sm:col-span-2" : ""}>
         <label htmlFor={field.name} className="label-text">
           {field.label}
         </label>
-        <input
-          id={field.name}
-          name={field.name}
-          type={field.type}
-          value={form[field.name]}
-          onChange={handleChange}
-          className={`input-field ${isError ? "border-danger" : ""}`}
-          placeholder={field.placeholder}
-          readOnly={field.readOnly}
-          inputMode={field.inputMode}
-        />
+        {isPasswordField ? (
+          <div className="relative">
+            <input
+              id={field.name}
+              name={field.name}
+              type={showPassword ? "text" : "password"}
+              value={form[field.name]}
+              onChange={handleChange}
+              className={`input-field pr-11 ${isError ? "border-danger" : ""}`}
+              placeholder={field.placeholder}
+              readOnly={field.readOnly}
+              inputMode={field.inputMode}
+            />
+            <button
+              type="button"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute inset-y-0 right-3 flex items-center text-slate-500 transition hover:text-slate-700 focus:outline-none"
+            >
+              {showPassword ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true">
+                  <path d="M3 3l18 18" strokeLinecap="round" />
+                  <path d="M10.58 10.58A2 2 0 0013.42 13.42" strokeLinecap="round" />
+                  <path d="M9.88 5.08A10.94 10.94 0 0112 5c4.5 0 8.24 2.5 10 7-1.02 2.22-2.54 4.02-4.45 5.15M6.61 6.61A15.1 15.1 0 002 12c1.76 4.5 5.5 7 10 7 1.59 0 3.09-.3 4.46-.86" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true">
+                  <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" strokeLinecap="round" strokeLinejoin="round" />
+                  <circle cx="12" cy="12" r="3.2" />
+                </svg>
+              )}
+            </button>
+          </div>
+        ) : (
+          <input
+            id={field.name}
+            name={field.name}
+            type={field.type}
+            value={form[field.name]}
+            onChange={handleChange}
+            className={`input-field ${isError ? "border-danger" : ""}`}
+            placeholder={field.placeholder}
+            readOnly={field.readOnly}
+            inputMode={field.inputMode}
+          />
+        )}
         {field.name === "password" && !isError && (
           <p className="mt-1 text-[11px] text-slate-500">कम से कम 8 अक्षर.</p>
         )}
@@ -572,6 +613,8 @@ export default function SignupForm() {
           {permanentAddressFields.map((field) => renderField(field))}
         </div>
       </div>
+
+      {renderField(referenceField)}
 
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
         <label className="flex items-start gap-3 text-sm text-slate-700">

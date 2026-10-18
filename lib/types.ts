@@ -43,6 +43,7 @@ export interface User {
   state: string | null;
   pincode: string | null;
   country: string | null;
+  nominee_edit_allowed?: boolean | null;
   status: UserStatus;
   is_active?: boolean | null;
   is_admin: boolean;

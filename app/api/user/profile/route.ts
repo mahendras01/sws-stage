@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getSession } from "@/lib/auth";
-import { getDepartments, getPosts, getUserProfileById, updateUserProfile } from "@/lib/db";
+import { getDepartments, getPosts, getUserById, getUserPendingNomineeRequest, getUserProfileById, updateUserProfile } from "@/lib/db";
 import { getRequestMeta, log, summarizeUser } from "@/lib/logger";
+import { validateProfileUpdatePayload } from "@/lib/profile-validation";
 
 const READ_ONLY_FIELDS = ["name", "email", "aadhar_number", "pan_number", "date_of_birth", "ehrms_code", "role_number"];
 const EDITABLE_FIELDS = [
@@ -37,36 +38,16 @@ const EDITABLE_FIELDS = [
   "country",
 ] as const;
 
-const FIELD_VALIDATORS: Record<string, (value: string) => boolean> = {
-  gender: (value) => ["Male", "Female", "Other"].includes(value),
-  father_husband_name: (value) => value.trim().length >= 2,
-  department_id: (value) => value.trim().length > 0,
-  post_id: (value) => value.trim().length > 0,
-  nominee_name: (value) => value.trim().length >= 2,
-  nominee_relationship: (value) => value.trim().length >= 2,
-  nominee_mobile_number: (value) => /^\d{10}$/.test(value),
-  nominee_aadhar_number: (value) => /^\d{12}$/.test(value),
-  nominee2_mobile_number: (value) => /^\d{10}$/.test(value),
-  phone_home: (value) => /^\d{10}$/.test(value),
-  blood_group: (value) => /^(A|B|AB|O)[+-]$/.test(value),
-  office_name: (value) => value.trim().length > 0,
-  sub_post: (value) => true,
-  block: (value) => true,
-  disease: (value) => true,
-  cause_of_illness: (value) => true,
-  phone_number: (value) => /^\d{10}$/.test(value),
-  bank_account_number: (value) => /^\d{10,18}$/.test(value),
-  bank_ifsc_code: (value) => /^[A-Z]{4}0[A-Z0-9]{6}$/.test(value.toUpperCase()),
-  bank_holder_name: (value) => value.trim().length >= 2,
-  house_flat_no: (value) => value.trim().length > 0,
-  street_locality: (value) => value.trim().length > 0,
-  village_city: (value) => value.trim().length > 0,
-  district: (value) => value.trim().length > 0,
-  state: (value) => value.trim().length > 0,
-  pincode: (value) => /^\d{6}$/.test(value),
-  country: (value) => value.trim().length > 0,
-  landmark: () => true,
-};
+const NOMINEE_EDIT_FIELDS = [
+  "nominee_name",
+  "nominee_relationship",
+  "nominee_mobile_number",
+  "nominee_aadhar_number",
+  "nominee2_relationship",
+  "nominee2_mobile_number",
+] as const;
+
+const NOMINEE_REQUEST_ALLOWED_STATUSES = new Set(["none", "approved", "rejected"]);
 
 function getSafeProfilePayload(body: Record<string, unknown>) {
   const safeUpdate: Record<string, unknown> = {};
@@ -80,6 +61,11 @@ function getSafeProfilePayload(body: Record<string, unknown>) {
 
       const value = typeof rawValue === "string" ? rawValue.trim() : String(rawValue).trim();
       if (field === "bank_ifsc_code") {
+        safeUpdate[field] = value.toUpperCase();
+        continue;
+      }
+
+      if (field === "blood_group" && value) {
         safeUpdate[field] = value.toUpperCase();
         continue;
       }
@@ -121,21 +107,7 @@ async function validateDepartmentPostSelection(departmentId: string, postId: str
 }
 
 function validateUpdates(updates: Record<string, unknown>) {
-  const errors: Record<string, string> = {};
-
-  for (const [field, value] of Object.entries(updates)) {
-    const validator = FIELD_VALIDATORS[field];
-    if (!validator) {
-      continue;
-    }
-
-    const normalized = typeof value === "string" ? value.trim() : String(value).trim();
-    if (!validator(normalized)) {
-      errors[field] = `Invalid ${field.replace(/_/g, " ")}.`;
-    }
-  }
-
-  return errors;
+  return validateProfileUpdatePayload(updates);
 }
 
 export async function GET(request: NextRequest) {
@@ -148,14 +120,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
   }
 
-  const { data, error } = await getUserProfileById(session.user.id);
+  const [{ data, error }, pendingRequest] = await Promise.all([
+    getUserProfileById(session.user.id),
+    getUserPendingNomineeRequest(session.user.id),
+  ]);
 
   if (error || !data) {
     log.error("profile.get.failed", { ...meta, userId: session.user.id, email: session.user.email, error });
     return NextResponse.json({ success: false, message: "Profile not found" }, { status: 404 });
   }
 
-  log.info("profile.get.success", { ...meta, user: summarizeUser(data) });
+  const nomineeRequestStatus = pendingRequest?.data?.status ?? "none";
+  log.info("profile.get.success", { ...meta, user: summarizeUser(data), nomineeRequestStatus });
 
   return NextResponse.json({
     success: true,
@@ -178,6 +154,9 @@ export async function GET(request: NextRequest) {
       nominee_aadhar_number: data.nominee_aadhar_number ?? "",
       nominee2_relationship: data.nominee2_relationship ?? "",
       nominee2_mobile_number: data.nominee2_mobile_number ?? "",
+      nominee_edit_allowed: Boolean(data.nominee_edit_allowed),
+      nominee_request_status: nomineeRequestStatus,
+      pending_nominee_request: pendingRequest?.data ?? null,
       phone_home: data.phone_home ?? "",
       blood_group: data.blood_group ?? "",
       office_name: data.office_name ?? "",
@@ -224,6 +203,17 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  const nomineeFieldsUpdated = NOMINEE_EDIT_FIELDS.some((field) => Object.prototype.hasOwnProperty.call(updates, field));
+  if (nomineeFieldsUpdated) {
+    const currentProfile = await getUserById(session.user.id);
+    if (!currentProfile.data || currentProfile.data.nominee_edit_allowed !== true) {
+      log.warn("profile.update.nominee_locked", { ...updateSummary, reason: "nominee_edit_not_approved" });
+      return NextResponse.json({ success: false, message: "Nominee details are locked. Submit a request and wait for admin approval." }, { status: 403 });
+    }
+
+    updates.nominee_edit_allowed = false;
+  }
+
   const validationErrors = validateUpdates(updates);
   if (Object.keys(validationErrors).length > 0) {
     log.warn("profile.update.validation_failed", { ...updateSummary, errors: validationErrors });
@@ -268,6 +258,7 @@ export async function PATCH(request: NextRequest) {
       nominee_aadhar_number: data.nominee_aadhar_number ?? "",
       nominee2_relationship: data.nominee2_relationship ?? "",
       nominee2_mobile_number: data.nominee2_mobile_number ?? "",
+      nominee_edit_allowed: Boolean(data.nominee_edit_allowed),
       phone_home: data.phone_home ?? "",
       blood_group: data.blood_group ?? "",
       office_name: data.office_name ?? "",
