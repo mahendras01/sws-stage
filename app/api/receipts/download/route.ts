@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import path from "path";
 import fs from "fs";
 import { requireAuth } from "@/lib/auth";
+import { canAccessReceiptForUser } from "@/lib/receipt-access";
 import { getReceiptById } from "@/lib/db";
 
 export async function GET(request: Request) {
@@ -17,8 +18,7 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json({ success: false, message: "Failed to fetch receipt" }, { status: 500 });
   if (!receipt) return NextResponse.json({ success: false, message: "Receipt not found" }, { status: 404 });
 
-  // ensure the current user owns the receipt (or is service role — not implemented here)
-  if (String(receipt.user_id) !== String(session.user.id)) {
+  if (!canAccessReceiptForUser({ id: session.user.id, role: session.user.role }, receipt.user_id)) {
     return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
   }
 

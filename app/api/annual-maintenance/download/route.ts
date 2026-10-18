@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { requireAuth } from "@/lib/auth";
+import { canAccessReceiptForUser } from "@/lib/receipt-access";
 import { getAnnualMaintenancePaymentById } from "@/lib/annual-maintenance";
 
 export async function GET(request: Request) {
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
   if (!payment) {
     return NextResponse.json({ success: false, message: "Annual maintenance payment not found" }, { status: 404 });
   }
-  if (String(payment.user_id) !== String(auth.session.user.id)) {
+  if (!canAccessReceiptForUser({ id: auth.session.user.id, role: auth.session.user.role }, payment.user_id)) {
     return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
   }
 

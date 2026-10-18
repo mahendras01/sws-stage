@@ -35,7 +35,7 @@ export default async function ViewAnnualMaintenanceReceiptsPage() {
     created_at: item.created_at,
     paid_by_name: item.user_name ?? session.user.name,
     paid_by_district: item.user_district ?? session.user.district,
-    paid_to_name: "SWS Bharat Annual Maintenance Fund",
+    paid_to_name: "Registration Money",
     paid_to_district: item.user_district ?? session.user.district,
     sahyog_type: "Annual Maintenance",
     district: item.user_district ?? session.user.district,

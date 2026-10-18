@@ -2,6 +2,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "./auth-options";
 import { NextResponse } from "next/server";
 
+export {
+  canAccessReceiptForUser,
+  canViewAllSahyogReceipts,
+} from "./receipt-access";
+
 export async function getSession() {
   return getServerSession(authOptions);
 }

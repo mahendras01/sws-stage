@@ -4,8 +4,8 @@ import path from "node:path";
 import test from "node:test";
 
 import { computeFileHash, extractPaymentFieldsFromText, isWorkerBasedReceiptParsingEnabled, normalizeReceiptReference, normalizeReferenceValue, validateReceiptFile } from "../lib/receipt-extraction.ts";
-import { normalizeTransactionReference, findDuplicateTransactionNumber } from "../lib/annual-maintenance.ts";
-import { ensurePdfKitFontDataFiles } from "../lib/pdf.ts";
+import { normalizeTransactionReference, findDuplicateTransactionNumber, generateAnnualMaintenanceReceipt, normalizeAnnualMaintenancePaidToName } from "../lib/annual-maintenance.ts";
+import { ensurePdfKitFontDataFiles, generateReceiptPdf } from "../lib/pdf.ts";
 
 test("extractPaymentFieldsFromText parses a PhonePe receipt snapshot", () => {
   const sample = `
@@ -135,6 +135,70 @@ test("ensurePdfKitFontDataFiles restores the AFM files needed by PDFKit in produ
   const copied = ensurePdfKitFontDataFiles();
   assert.ok(copied.length > 0, "expected PDFKit font files to be restored");
   assert.ok(copied.some((file) => file.endsWith("Helvetica.afm")), "expected Helvetica.afm to be available");
+});
+
+test("generateReceiptPdf can generate repeated receipts for the same seed without a filename collision", async () => {
+  const receiptData = {
+    receipt_number: "AM-REC-RETRY-SAME-SEED",
+    transaction_number: "TXN-RETRY-SAME-SEED",
+    transaction_id: "TXN-RETRY-SAME-SEED",
+    amount: 2500,
+    created_at: new Date().toISOString(),
+    sahyog_type: "Annual Maintenance",
+    paid_by_name: "Test User",
+    paid_by_district: "Lucknow",
+    paid_to_name: "Registration Money",
+    paid_to_district: "Lucknow",
+  };
+
+  const firstPath = await generateReceiptPdf(receiptData, { name: "Test User", phone_number: "9999999999", email: "test@example.com", address: "1 Main Street, Lucknow", paid_by_name: "Test User", paid_by_district: "Lucknow", paid_to_name: "Registration Money", paid_to_district: "Lucknow" });
+  const secondPath = await generateReceiptPdf(receiptData, { name: "Test User", phone_number: "9999999999", email: "test@example.com", address: "1 Main Street, Lucknow", paid_by_name: "Test User", paid_by_district: "Lucknow", paid_to_name: "Registration Money", paid_to_district: "Lucknow" });
+
+  assert.ok(firstPath.startsWith("private/receipts/pdf/"));
+  assert.ok(secondPath.startsWith("private/receipts/pdf/"));
+  assert.ok(fs.existsSync(path.join(process.cwd(), firstPath)));
+  assert.ok(fs.existsSync(path.join(process.cwd(), secondPath)));
+
+  await fs.promises.unlink(path.join(process.cwd(), firstPath)).catch(() => undefined);
+  await fs.promises.unlink(path.join(process.cwd(), secondPath)).catch(() => undefined);
+});
+
+test("normalizeAnnualMaintenancePaidToName remaps legacy annual-maintenance labels to Registration Money", () => {
+  assert.equal(normalizeAnnualMaintenancePaidToName("SWS Bharat Annual Maintenance Fund"), "Registration Money");
+  assert.equal(normalizeAnnualMaintenancePaidToName("Registration Money"), "Registration Money");
+  assert.equal(normalizeAnnualMaintenancePaidToName(null), "Registration Money");
+});
+
+test("generateAnnualMaintenanceReceipt labels the recipient as Registration Money", async () => {
+  const result = await generateAnnualMaintenanceReceipt({
+    id: "am-123",
+    user_id: "user-123",
+    transaction_number: "TXN-REG-123",
+    amount: 2500,
+    created_at: new Date().toISOString(),
+    payment_date: new Date().toISOString(),
+  }, {
+    name: "Test User",
+    email: "test@example.com",
+    phone_number: "9999999999",
+    district: "Lucknow",
+    state: "Uttar Pradesh",
+    village_city: "Lucknow",
+    house_flat_no: "1",
+    street_locality: "Main Street",
+    landmark: "Near Park",
+    pincode: "226001",
+    country: "India",
+  });
+
+  assert.ok(result.generated_receipt_path);
+  assert.match(result.generated_receipt_path, /^private\/receipts\/pdf\//);
+  assert.equal(result.paid_to_name, "Registration Money");
+
+  const pdfFile = path.join(process.cwd(), result.generated_receipt_path);
+  assert.ok(fs.existsSync(pdfFile), "expected PDF file to be generated");
+
+  await fs.promises.unlink(pdfFile).catch(() => undefined);
 });
 
 test("findDuplicateTransactionNumber reports duplicates and accepts unique references", async () => {

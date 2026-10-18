@@ -227,6 +227,32 @@ export default function SignupForm() {
     }
   };
 
+  useEffect(() => {
+    if (!form.permanent_same_as_current) {
+      return;
+    }
+
+    setForm((prev) => {
+      const nextPermanentValues = {
+        permanent_house_flat_no: prev.house_flat_no,
+        permanent_street_locality: prev.street_locality,
+        permanent_landmark: prev.landmark,
+        permanent_village_city: prev.village_city,
+        permanent_district: prev.district,
+        permanent_state: prev.state,
+        permanent_pincode: prev.pincode,
+        permanent_country: prev.country || "India",
+      };
+
+      const hasChanged = Object.entries(nextPermanentValues).some(([key, value]) => prev[key as keyof typeof nextPermanentValues] !== value);
+      if (!hasChanged) {
+        return prev;
+      }
+
+      return { ...prev, ...nextPermanentValues };
+    });
+  }, [form.permanent_same_as_current, form.house_flat_no, form.street_locality, form.landmark, form.village_city, form.district, form.state, form.pincode, form.country]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const target = e.target as HTMLInputElement | HTMLSelectElement;
     const { name, type, value } = target;
@@ -239,22 +265,22 @@ export default function SignupForm() {
         return { ...prev, department_id: value, post_id: "" };
       }
 
-      if (fieldName === "permanent_same_as_current" && checked) {
-        return {
-          ...prev,
-          permanent_same_as_current: true,
-          permanent_house_flat_no: prev.house_flat_no,
-          permanent_street_locality: prev.street_locality,
-          permanent_landmark: prev.landmark,
-          permanent_village_city: prev.village_city,
-          permanent_district: prev.district,
-          permanent_state: prev.state,
-          permanent_pincode: prev.pincode,
-          permanent_country: prev.country || "India",
-        };
-      }
+      if (fieldName === "permanent_same_as_current") {
+        if (checked) {
+          return {
+            ...prev,
+            permanent_same_as_current: true,
+            permanent_house_flat_no: prev.house_flat_no,
+            permanent_street_locality: prev.street_locality,
+            permanent_landmark: prev.landmark,
+            permanent_village_city: prev.village_city,
+            permanent_district: prev.district,
+            permanent_state: prev.state,
+            permanent_pincode: prev.pincode,
+            permanent_country: prev.country || "India",
+          };
+        }
 
-      if (fieldName === "permanent_same_as_current" && !checked) {
         return { ...prev, permanent_same_as_current: false };
       }
 
@@ -393,7 +419,7 @@ export default function SignupForm() {
 
   const personalFields: FieldConfig[] = [
     { name: "name", label: "पूरा नाम", type: "text", placeholder: "अपना पूरा नाम दर्ज करें" },
-    { name: "father_husband_name", label: "पिता का नाम", type: "text", placeholder: "पिता का नाम दर्ज करें" },
+    { name: "father_husband_name", label: "पिता/पति का नाम", type: "text", placeholder: "पिता का नाम दर्ज करें" },
     { name: "email", label: "ईमेल", type: "email", placeholder: "you@example.com" },
     {
       name: "password",
@@ -402,7 +428,7 @@ export default function SignupForm() {
       placeholder: "कम से कम 8 अक्षर",
     },
     { name: "date_of_birth", label: "जन्म तिथि (आधार के अनुसार)", type: "date" },
-    { name: "phone_number", label: "फोन नंबर", type: "tel", placeholder: "10 अंकों का नंबर" },
+    { name: "phone_number", label: "मोबाइल नंबर", type: "tel", placeholder: "10 अंकों का नंबर" },
     { name: "blood_group", label: "रक्त समूह", type: "select" },
   ] as const;
 
@@ -416,6 +442,7 @@ export default function SignupForm() {
     { name: "nominee_name", label: "नॉमिनी का नाम", type: "text", placeholder: "नॉमिनी का नाम दर्ज करें" },
     { name: "nominee_relationship", label: "नॉमिनी से संबंध", type: "text", placeholder: "संबंध दर्ज करें" },
     { name: "nominee_mobile_number", label: "नॉमिनी का मोबाइल नंबर", type: "tel", placeholder: "10 अंकों का नंबर" },
+    { name: "nominee_aadhar_number", label: "नॉमिनी का आधार नंबर", type: "tel", placeholder: "12 अंकों का नंबर" },
   ] as const;
 
   const referenceField: FieldConfig = {
@@ -607,12 +634,14 @@ export default function SignupForm() {
         </div>
       </div>
 
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Permanent Address</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {permanentAddressFields.map((field) => renderField(field))}
+      {!form.permanent_same_as_current && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-gray-900">Permanent Address</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {permanentAddressFields.map((field) => renderField(field))}
+          </div>
         </div>
-      </div>
+      )}
 
       {renderField(referenceField)}
 

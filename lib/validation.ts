@@ -197,7 +197,7 @@ export function validateSignup(data: SignupInput): ValidationResult {
     errors.nominee_mobile_number = "नॉमिनी का मोबाइल नंबर बिल्कुल 10 अंकों का होना चाहिए";
   }
 
-  if (normalized.nominee_aadhar_number && !/^\d{12}$/.test(normalized.nominee_aadhar_number)) {
+  if (!normalized.nominee_aadhar_number || !/^\d{12}$/.test(normalized.nominee_aadhar_number)) {
     errors.nominee_aadhar_number = "नॉमिनी का आधार नंबर बिल्कुल 12 अंकों का होना चाहिए";
   }
 

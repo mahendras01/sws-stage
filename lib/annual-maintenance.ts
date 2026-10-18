@@ -139,6 +139,22 @@ export async function upsertAnnualMaintenanceSettings(userId: string, payload: P
   return tryUpsert(false);
 }
 
+export async function annualMaintenanceSupportsFileHashColumn() {
+  try {
+    const rows = await queryRows<{ column_name: string }>(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'annual_maintenance_payments'
+         AND column_name = 'file_hash'
+       LIMIT 1`,
+    );
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function createAnnualMaintenancePayment(payload: {
   userId: string;
   transactionNumber: string;
@@ -149,38 +165,81 @@ export async function createAnnualMaintenancePayment(payload: {
   notes?: string | null;
   fileHash?: string | null;
 }) {
+  const hasFileHashColumn = await annualMaintenanceSupportsFileHashColumn();
+
   try {
+    const insertColumns = [
+      "payment_category",
+      "user_id",
+      "transaction_number",
+      "amount",
+      "payment_date",
+      "payment_receipt_path",
+      "payment_receipt_name",
+      "notes",
+      ...(hasFileHashColumn ? ["file_hash"] : []),
+      "status",
+    ];
+
+    const values = [
+      "ANNUAL_MAINTENANCE",
+      payload.userId,
+      payload.transactionNumber.trim(),
+      payload.amount ?? null,
+      payload.paymentDate ?? null,
+      payload.receiptPath ?? null,
+      payload.receiptName ?? null,
+      payload.notes?.trim() || null,
+      ...(hasFileHashColumn ? [payload.fileHash ?? null] : []),
+      "pending",
+    ];
+
     const rows = await queryRows(
       `INSERT INTO annual_maintenance_payments (
-        payment_category,
-        user_id,
-        transaction_number,
-        amount,
-        payment_date,
-        payment_receipt_path,
-        payment_receipt_name,
-        notes,
-        file_hash,
-        status
+        ${insertColumns.map((column) => `"${column}"`).join(", ")}
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      VALUES (${insertColumns.map((_, index) => `$${index + 1}`).join(", ")})
       RETURNING *`,
-      [
-        "ANNUAL_MAINTENANCE",
-        payload.userId,
-        payload.transactionNumber.trim(),
-        payload.amount ?? null,
-        payload.paymentDate ?? null,
-        payload.receiptPath ?? null,
-        payload.receiptName ?? null,
-        payload.notes?.trim() || null,
-        payload.fileHash ?? null,
-        "pending",
-      ],
+      values,
     );
 
     return { data: rows[0] ?? null, error: null };
   } catch (error) {
+    if (String(error instanceof Error ? error.message : error).includes("file_hash") && String(error instanceof Error ? error.message : error).includes("does not exist")) {
+      try {
+        const rows = await queryRows(
+          `INSERT INTO annual_maintenance_payments (
+            payment_category,
+            user_id,
+            transaction_number,
+            amount,
+            payment_date,
+            payment_receipt_path,
+            payment_receipt_name,
+            notes,
+            status
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          RETURNING *`,
+          [
+            "ANNUAL_MAINTENANCE",
+            payload.userId,
+            payload.transactionNumber.trim(),
+            payload.amount ?? null,
+            payload.paymentDate ?? null,
+            payload.receiptPath ?? null,
+            payload.receiptName ?? null,
+            payload.notes?.trim() || null,
+            "pending",
+          ],
+        );
+
+        return { data: rows[0] ?? null, error: null };
+      } catch (retryError) {
+        return { data: null, error: toDbError(retryError) };
+      }
+    }
+
     return { data: null, error: toDbError(error) };
   }
 }
@@ -268,6 +327,14 @@ export async function getAnnualMaintenancePaymentByTransaction(userId: string, t
   }
 }
 
+export function normalizeAnnualMaintenancePaidToName(value?: string | null) {
+  if (!value || value === "SWS Bharat Annual Maintenance Fund") {
+    return "Registration Money";
+  }
+
+  return value;
+}
+
 export async function getAnnualMaintenancePaymentById(paymentId: string) {
   try {
     const rows = await queryRows<any>(
@@ -283,7 +350,18 @@ export async function getAnnualMaintenancePaymentById(paymentId: string) {
       [paymentId],
     );
 
-    return { data: rows[0] ?? null, error: null };
+    const row = rows[0] ?? null;
+    if (!row) {
+      return { data: null, error: null };
+    }
+
+    return {
+      data: {
+        ...row,
+        paid_to_name: normalizeAnnualMaintenancePaidToName(row.paid_to_name),
+      },
+      error: null,
+    };
   } catch (error) {
     return { data: null, error: toDbError(error) };
   }
@@ -382,7 +460,7 @@ export async function generateAnnualMaintenanceReceipt(payment: {
     transaction_date: payment.payment_date ?? payment.created_at ?? null,
     paid_by_name: user.name ?? "-",
     paid_by_district: user.district ?? "-",
-    paid_to_name: "SWS Bharat Annual Maintenance Fund",
+    paid_to_name: "Registration Money",
     paid_to_district: user.district ?? "-",
     sahyog_type: "Annual Maintenance",
     payment_provider: "Annual Maintenance",
@@ -393,12 +471,13 @@ export async function generateAnnualMaintenanceReceipt(payment: {
     address,
     paid_by_name: user.name ?? "-",
     paid_by_district: user.district ?? "-",
-    paid_to_name: "SWS Bharat Annual Maintenance Fund",
+    paid_to_name: normalizeAnnualMaintenancePaidToName("SWS Bharat Annual Maintenance Fund"),
     paid_to_district: user.district ?? "-",
   });
 
   return {
     receipt_number: receiptNumber,
     generated_receipt_path: pdfRelativePath,
+    paid_to_name: "Registration Money",
   };
 }

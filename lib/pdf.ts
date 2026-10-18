@@ -40,15 +40,34 @@ export function ensurePdfKitFontDataFiles(): string[] {
     return [];
   }
 
-  const targetDirs = [
+  const targetDirs = new Set<string>([
     path.join(process.cwd(), ".next", "server", "chunks", "data"),
     path.join(process.cwd(), ".next", "server", "data"),
+    path.join(process.cwd(), ".next", "server", "vendor-chunks", "data"),
     path.join(process.cwd(), ".next", "standalone", "server", "chunks", "data"),
     path.join(process.cwd(), ".next", "standalone", "server", "data"),
+    path.join(process.cwd(), ".next", "standalone", "server", "vendor-chunks", "data"),
+  ]);
+
+  const baseDirs = [
+    path.join(process.cwd(), ".next", "server"),
+    path.join(process.cwd(), ".next", "standalone", "server"),
   ];
 
+  for (const baseDir of baseDirs) {
+    if (!fs.existsSync(baseDir)) continue;
+
+    for (const entry of fs.readdirSync(baseDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const candidate = path.join(baseDir, entry.name, "data");
+      if (fs.existsSync(candidate) || candidate.includes("vendor-chunks") || candidate.includes("chunks")) {
+        targetDirs.add(candidate);
+      }
+    }
+  }
+
   const copiedFiles: string[] = [];
-  for (const targetDir of targetDirs) {
+  for (const targetDir of Array.from(targetDirs)) {
     fs.mkdirSync(targetDir, { recursive: true });
 
     for (const fileName of fs.readdirSync(sourceDataDir)) {
@@ -79,8 +98,11 @@ export async function generateReceiptPdf(receipt: ReceiptData, user: UserData, o
   await fs.promises.mkdir(outDir, { recursive: true });
 
   const seed = String(receipt.receipt_number ?? receipt.transaction_number ?? receipt.transaction_id ?? receipt.id ?? crypto.randomUUID());
-  const safeName = `SWS-REC-${seed.replace(/[^a-zA-Z0-9._-]/g, "-")}.pdf`;
-  const outPath = path.join(outDir, safeName);
+  const safeBaseName = `SWS-REC-${seed.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
+  const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
+  const safeName = `${safeBaseName}.pdf`;
+  const candidatePath = path.join(outDir, safeName);
+  const outPath = fs.existsSync(candidatePath) ? path.join(outDir, `${safeBaseName}-${uniqueSuffix}.pdf`) : candidatePath;
 
   return createPdfAtPath(outPath, receipt, user, options);
 }
@@ -88,9 +110,16 @@ export async function generateReceiptPdf(receipt: ReceiptData, user: UserData, o
 function createPdfAtPath(fullPath: string, receipt: ReceiptData, user: UserData, options?: PdfOptions) {
   return new Promise<string>((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 48 });
-    const stream = fs.createWriteStream(fullPath, { flags: "wx" });
+    const stream = fs.createWriteStream(fullPath, { flags: "w" });
 
-    stream.on("error", (err) => reject(err));
+    doc.on("error", (err: Error) => {
+      stream.destroy();
+      reject(err);
+    });
+    stream.on("error", (err) => {
+      doc.destroy();
+      reject(err);
+    });
     stream.on("finish", () => resolve(path.relative(process.cwd(), fullPath)));
     doc.pipe(stream);
 

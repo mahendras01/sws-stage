@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { createAnnualMaintenancePayment, getAnnualMaintenanceSettings, updateAnnualMaintenancePayment, generateAnnualMaintenanceReceipt, buildAnnualMaintenanceReceiptNumber, findDuplicateTransactionNumber, getAnnualMaintenancePaymentByTransaction, ensureAnnualMaintenanceReceiptRecord } from "@/lib/annual-maintenance";
+import { createAnnualMaintenancePayment, getAnnualMaintenanceSettings, updateAnnualMaintenancePayment, generateAnnualMaintenanceReceipt, buildAnnualMaintenanceReceiptNumber, findDuplicateTransactionNumber, getAnnualMaintenancePaymentByTransaction, ensureAnnualMaintenanceReceiptRecord, annualMaintenanceSupportsFileHashColumn } from "@/lib/annual-maintenance";
 import { getUserProfileById } from "@/lib/db";
 import { queryRows } from "@/lib/postgres";
 import { computeFileHash, normalizeReferenceValue } from "@/lib/receipt-extraction";
@@ -153,14 +153,17 @@ export async function POST(request: Request) {
     finalPath = path.join(storageDir, safeName);
     const arrayBuffer = await file.arrayBuffer();
     const fileHash = computeFileHash(Buffer.from(arrayBuffer));
-    const existingFileHashMatch = await queryRows<{ id: string }>(
-      `SELECT id FROM receipts WHERE file_hash = $1
-       UNION ALL
-       SELECT id FROM annual_maintenance_payments WHERE file_hash = $1
-       LIMIT 1`,
-      [fileHash],
-    );
-    if (existingFileHashMatch.length > 0) {
+    const hasFileHashColumn = await annualMaintenanceSupportsFileHashColumn();
+    const existingFileHashMatch = hasFileHashColumn
+      ? await queryRows<{ id: string }>(
+        `SELECT id FROM receipts WHERE file_hash = $1
+         UNION ALL
+         SELECT id FROM annual_maintenance_payments WHERE file_hash = $1
+         LIMIT 1`,
+        [fileHash],
+      )
+      : [];
+    if (hasFileHashColumn && existingFileHashMatch.length > 0) {
       return NextResponse.json({ success: false, message: "This receipt image has already been uploaded. Please check the file and try a different copy." }, { status: 409 });
     }
 
@@ -229,6 +232,7 @@ export async function POST(request: Request) {
         paymentId: data.id,
         userId: auth.session.user.id,
         message: generationError instanceof Error ? generationError.message : String(generationError),
+        stack: generationError instanceof Error ? generationError.stack : undefined,
       });
       return NextResponse.json({ success: false, message: "Payment was saved but the receipt could not be generated", details: generationError instanceof Error ? generationError.message : "Unknown receipt generation error" }, { status: 500 });
     }

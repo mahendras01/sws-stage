@@ -1268,7 +1268,12 @@ export async function deleteReceipt(receiptId: string) {
   }
 }
 
-export async function getReceiptsByUser(userId: string) {
+export async function getReceiptsByUser(
+  userId: string,
+  options?: { includeAll?: boolean; role?: string | null },
+) {
+  const includeAll = Boolean(options?.includeAll && options.role === "super_admin");
+
   try {
     const data = await queryRows<any>(
       `SELECT r.*,
@@ -1282,9 +1287,9 @@ export async function getReceiptsByUser(userId: string) {
        FROM receipts r
        LEFT JOIN users uploader ON uploader.id = r.user_id
        LEFT JOIN users recipient ON recipient.id = r.paid_to_user_id
-       WHERE r.user_id = $1
+       ${includeAll ? "" : "WHERE r.user_id = $1"}
        ORDER BY r.created_at DESC`,
-      [userId],
+      includeAll ? [] : [userId],
     );
     return { data: data.map((receipt) => hydrateReceiptRecord(receipt)), error: null };
   } catch (error) {
