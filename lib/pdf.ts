@@ -93,8 +93,10 @@ export function resolveDevanagariFontPath(): string | null {
     path.join(process.cwd(), "public", "fonts", "Mangal-Regular.ttf"),
   ].filter((value): value is string => Boolean(value));
 
+  const fontFilePattern = /\.(ttf|otf|ttc|otc)$/i;
+
   for (const candidate of customCandidates) {
-    if (fs.existsSync(candidate) && /\.(ttf|otf)$/i.test(candidate)) {
+    if (fs.existsSync(candidate) && fontFilePattern.test(candidate)) {
       return candidate;
     }
   }
@@ -125,7 +127,7 @@ export function resolveDevanagariFontPath(): string | null {
         continue;
       }
 
-      if ((entry.name.endsWith(".ttf") || entry.name.endsWith(".otf")) && isDevanagariFont(fullPath)) {
+      if (fontFilePattern.test(entry.name) && isDevanagariFont(fullPath)) {
         return fullPath;
       }
     }

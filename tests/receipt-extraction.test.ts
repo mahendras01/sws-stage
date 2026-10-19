@@ -137,11 +137,32 @@ test("ensurePdfKitFontDataFiles restores the AFM files needed by PDFKit in produ
   assert.ok(copied.some((file) => file.endsWith("Helvetica.afm")), "expected Helvetica.afm to be available");
 });
 
+test("resolveDevanagariFontPath accepts valid Devanagari font collections like .ttc", () => {
+  const tempDir = fs.mkdtempSync(path.join(process.cwd(), "tmp-devanagari-font-"));
+  const fontPath = path.join(tempDir, "GotuDevanagari-Regular.ttc");
+  fs.writeFileSync(fontPath, Buffer.from("fake-ttc-font"));
+
+  const previous = process.env.PDF_DEVANAGARI_FONT_PATH;
+  process.env.PDF_DEVANAGARI_FONT_PATH = fontPath;
+
+  try {
+    const resolved = resolveDevanagariFontPath();
+    assert.equal(resolved, fontPath, "expected a .ttc Devanagari font path to be accepted");
+  } finally {
+    if (previous === undefined) {
+      delete process.env.PDF_DEVANAGARI_FONT_PATH;
+    } else {
+      process.env.PDF_DEVANAGARI_FONT_PATH = previous;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("resolveDevanagariFontPath finds a Unicode-capable Devanagari font when available", () => {
   const resolved = resolveDevanagariFontPath();
   if (resolved) {
     assert.ok(fs.existsSync(resolved), "expected the discovered font path to exist");
-    assert.match(resolved, /\.(ttf|otf)$/i, "expected a TTF or OTF font file");
+    assert.match(resolved, /\.(ttf|otf|ttc|otc)$/i, "expected a supported Devanagari font file");
   }
 });
 
