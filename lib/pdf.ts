@@ -85,6 +85,62 @@ export function ensurePdfKitFontDataFiles(): string[] {
   return copiedFiles;
 }
 
+export function resolveDevanagariFontPath(): string | null {
+  const customCandidates = [
+    process.env.PDF_DEVANAGARI_FONT_PATH,
+    path.join(process.cwd(), "public", "fonts", "NotoSansDevanagari-Regular.ttf"),
+    path.join(process.cwd(), "public", "fonts", "GotuDevanagari-Regular.ttf"),
+    path.join(process.cwd(), "public", "fonts", "Mangal-Regular.ttf"),
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of customCandidates) {
+    if (fs.existsSync(candidate) && /\.(ttf|otf)$/i.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  const searchRoots = [
+    "/System/Library/PrivateFrameworks/FontServices.framework/Versions/A/Resources/Fonts/Subsets",
+    "/System/Library/Fonts",
+    "/System/Library/Fonts/Supplemental",
+    "/Library/Fonts",
+    "/usr/share/fonts",
+    "/usr/local/share/fonts",
+    path.join(process.cwd(), "public", "fonts"),
+  ];
+
+  const isDevanagariFont = (filePath: string) => {
+    const normalized = filePath.toLowerCase();
+    return /devanagari/.test(normalized) || /noto.*sans.*devanagari/.test(normalized) || /gotu.*devanagari/.test(normalized) || /jaini.*devanagari/.test(normalized) || /modak.*devanagari/.test(normalized) || /mangal/.test(normalized) || /lohit.*devanagari/.test(normalized);
+  };
+
+  const walkForDevanagariFont = (startDir: string): string | null => {
+    if (!fs.existsSync(startDir)) return null;
+
+    for (const entry of fs.readdirSync(startDir, { withFileTypes: true })) {
+      const fullPath = path.join(startDir, entry.name);
+      if (entry.isDirectory()) {
+        const nested = walkForDevanagariFont(fullPath);
+        if (nested) return nested;
+        continue;
+      }
+
+      if ((entry.name.endsWith(".ttf") || entry.name.endsWith(".otf")) && isDevanagariFont(fullPath)) {
+        return fullPath;
+      }
+    }
+
+    return null;
+  };
+
+  for (const root of searchRoots) {
+    const found = walkForDevanagariFont(root);
+    if (found) return found;
+  }
+
+  return null;
+}
+
 function asDisplay(value: unknown) {
   if (value === null || value === undefined) return "-";
   const text = String(value).trim();
@@ -111,6 +167,16 @@ function createPdfAtPath(fullPath: string, receipt: ReceiptData, user: UserData,
   return new Promise<string>((resolve, reject) => {
     const doc = new PDFDocument({ size: "A4", margin: 48 });
     const stream = fs.createWriteStream(fullPath, { flags: "w" });
+    const devanagariFontPath = resolveDevanagariFontPath();
+
+    if (devanagariFontPath) {
+      try {
+        doc.registerFont("DevanagariReceiptFont", devanagariFontPath);
+        doc.font("DevanagariReceiptFont");
+      } catch {
+        // Ignore invalid font registrations and fall back to default PDF fonts.
+      }
+    }
 
     doc.on("error", (err: Error) => {
       stream.destroy();

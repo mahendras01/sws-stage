@@ -96,7 +96,8 @@ export async function POST(request: Request) {
       const { error: updateError } = await updateAnnualMaintenancePayment(retryPayment.id, {
         receipt_number: generatedReceipt.receipt_number,
         generated_receipt_path: generatedReceipt.generated_receipt_path,
-        status: "approved",
+        status: "pending",
+        verification_status: "pending",
       });
 
       if (updateError) {
@@ -174,6 +175,7 @@ export async function POST(request: Request) {
     const { data, error } = await createAnnualMaintenancePayment({
       userId: auth.session.user.id,
       transactionNumber: normalizedTransactionNumber,
+      transactionUtr: normalizedTransactionNumber,
       amount,
       paymentDate: paymentDate || null,
       receiptPath,
@@ -240,7 +242,8 @@ export async function POST(request: Request) {
     const { error: updateError } = await updateAnnualMaintenancePayment(data.id, {
       receipt_number: generatedReceipt.receipt_number,
       generated_receipt_path: generatedReceipt.generated_receipt_path,
-      status: "approved",
+      status: "pending",
+      verification_status: "pending",
     });
 
     if (updateError) {

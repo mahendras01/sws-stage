@@ -5,8 +5,8 @@ import { useEffect, useRef, useState, type TouchEvent } from "react";
 
 const slides = [
   {
-    src: "/images/Self_Welfare_Society_Registration.jpg",
-    alt: "Self Welfare Society registration banner",
+    src: "/images/Self%20Welfare%20Society%20Announcement%20Banner.png",
+    alt: "Self Welfare Society announcement banner",
   },
 ];
 

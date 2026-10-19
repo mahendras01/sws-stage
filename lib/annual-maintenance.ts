@@ -158,6 +158,7 @@ export async function annualMaintenanceSupportsFileHashColumn() {
 export async function createAnnualMaintenancePayment(payload: {
   userId: string;
   transactionNumber: string;
+  transactionUtr?: string | null;
   amount: number | null;
   paymentDate?: string | null;
   receiptPath?: string | null;
@@ -166,18 +167,22 @@ export async function createAnnualMaintenancePayment(payload: {
   fileHash?: string | null;
 }) {
   const hasFileHashColumn = await annualMaintenanceSupportsFileHashColumn();
+  const hasTransactionUtrColumn = await annualMaintenanceSupportsColumn("transaction_utr");
+  const hasVerificationStatusColumn = await annualMaintenanceSupportsColumn("verification_status");
 
   try {
     const insertColumns = [
       "payment_category",
       "user_id",
       "transaction_number",
+      ...(hasTransactionUtrColumn ? ["transaction_utr"] : []),
       "amount",
       "payment_date",
       "payment_receipt_path",
       "payment_receipt_name",
       "notes",
       ...(hasFileHashColumn ? ["file_hash"] : []),
+      ...(hasVerificationStatusColumn ? ["verification_status"] : []),
       "status",
     ];
 
@@ -185,12 +190,14 @@ export async function createAnnualMaintenancePayment(payload: {
       "ANNUAL_MAINTENANCE",
       payload.userId,
       payload.transactionNumber.trim(),
+      ...(hasTransactionUtrColumn ? [normalizeTransactionReference(payload.transactionUtr ?? payload.transactionNumber) ?? null] : []),
       payload.amount ?? null,
       payload.paymentDate ?? null,
       payload.receiptPath ?? null,
       payload.receiptName ?? null,
       payload.notes?.trim() || null,
       ...(hasFileHashColumn ? [payload.fileHash ?? null] : []),
+      ...(hasVerificationStatusColumn ? [DEFAULT_ANNUAL_MAINTENANCE_VERIFICATION_STATUS] : []),
       "pending",
     ];
 
@@ -244,9 +251,141 @@ export async function createAnnualMaintenancePayment(payload: {
   }
 }
 
+export async function annualMaintenanceSupportsColumn(columnName: string) {
+  try {
+    const rows = await queryRows<{ column_name: string }>(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'annual_maintenance_payments'
+         AND column_name = $1
+       LIMIT 1`,
+      [columnName],
+    );
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export const DEFAULT_ANNUAL_MAINTENANCE_VERIFICATION_STATUS = "pending" as const;
+export type AnnualMaintenanceVerificationStatus = "pending" | "verified" | "rejected";
+
 export function normalizeTransactionReference(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized ? normalized.toLowerCase() : null;
+}
+
+export function isAnnualMaintenanceVerificationComplete(status?: string | null) {
+  return status === "verified";
+}
+
+export function isMembershipAuthorizationRequired(input: {
+  is_active?: boolean | null;
+  userStatus?: string | null;
+  paymentVerificationStatus?: string | null;
+}) {
+  const isPaymentPolicyActive = Boolean(input.is_active);
+  if (!isPaymentPolicyActive) {
+    return false;
+  }
+
+  const effectiveUserStatus = input.userStatus ?? "pending";
+  if (effectiveUserStatus !== "approved") {
+    return true;
+  }
+
+  return !isAnnualMaintenanceVerificationComplete(input.paymentVerificationStatus);
+}
+
+export function isMembershipAuthorized(input: {
+  is_active?: boolean | null;
+  userStatus?: string | null;
+  paymentVerificationStatus?: string | null;
+  verifiedByRole?: string | null;
+}) {
+  if (!input.is_active) {
+    return input.userStatus === "approved";
+  }
+
+  if (input.userStatus !== "approved") {
+    return false;
+  }
+
+  if (!isAnnualMaintenanceVerificationComplete(input.paymentVerificationStatus)) {
+    return false;
+  }
+
+  return input.verifiedByRole === "super_admin";
+}
+
+export async function getMembershipAuthorizationStatusForUser(userId: string, userStatus?: string | null) {
+  const activeSettings = await queryRows<{ is_active: boolean }>(
+    `SELECT is_active
+     FROM annual_maintenance_settings
+     WHERE payment_category = 'ANNUAL_MAINTENANCE'
+       AND is_active = TRUE
+     ORDER BY updated_at DESC
+     LIMIT 1`,
+  );
+
+  if (activeSettings.length === 0) {
+    return { required: false, authorized: userStatus === "approved", verificationStatus: null, verifiedByRole: null };
+  }
+
+  try {
+    const rows = await queryRows<{ verification_status: string | null; role: string | null }>(
+      `SELECT ap.verification_status, u.role
+       FROM annual_maintenance_payments ap
+       LEFT JOIN users u ON u.id = ap.verified_by
+       WHERE ap.user_id = $1 AND ap.payment_category = 'ANNUAL_MAINTENANCE'
+       ORDER BY ap.created_at DESC
+       LIMIT 1`,
+      [userId],
+    );
+
+    const paymentVerificationStatus = rows[0]?.verification_status ?? DEFAULT_ANNUAL_MAINTENANCE_VERIFICATION_STATUS;
+    const verifiedByRole = rows[0]?.role ?? null;
+    const authorized = isMembershipAuthorized({
+      is_active: true,
+      userStatus,
+      paymentVerificationStatus,
+      verifiedByRole,
+    });
+
+    return {
+      required: true,
+      authorized,
+      verificationStatus: paymentVerificationStatus,
+      verifiedByRole,
+    };
+  } catch (error) {
+    const fallbackRows = await queryRows<{ status: string | null; role: string | null }>(
+      `SELECT ap.status, u.role
+       FROM annual_maintenance_payments ap
+       LEFT JOIN users u ON u.id = ap.verified_by
+       WHERE ap.user_id = $1 AND ap.payment_category = 'ANNUAL_MAINTENANCE'
+       ORDER BY ap.created_at DESC
+       LIMIT 1`,
+      [userId],
+    );
+
+    const paymentVerificationStatus = fallbackRows[0]?.status ?? DEFAULT_ANNUAL_MAINTENANCE_VERIFICATION_STATUS;
+    const verifiedByRole = fallbackRows[0]?.role ?? null;
+    const authorized = isMembershipAuthorized({
+      is_active: true,
+      userStatus,
+      paymentVerificationStatus,
+      verifiedByRole,
+    });
+
+    return {
+      required: true,
+      authorized,
+      verificationStatus: paymentVerificationStatus,
+      verifiedByRole,
+    };
+  }
 }
 
 export async function findDuplicateTransactionNumber(transactionNumber: string, excludePaymentId?: string | null) {
@@ -267,9 +406,9 @@ export async function findDuplicateTransactionNumber(transactionNumber: string, 
 
          UNION ALL
 
-         SELECT 'annual_maintenance'::text AS source, ap.id, ap.user_id, ap.transaction_number, ap.transaction_number AS transaction_id, NULL AS transaction_utr, ap.amount, ap.created_at, ap.payment_category AS sahyog_type
+         SELECT 'annual_maintenance'::text AS source, ap.id, ap.user_id, ap.transaction_number, ap.transaction_number AS transaction_id, COALESCE(ap.transaction_utr, ap.transaction_number) AS transaction_utr, ap.amount, ap.created_at, ap.payment_category AS sahyog_type
          FROM annual_maintenance_payments ap
-         WHERE LOWER(COALESCE(ap.transaction_number, '')) = $1
+         WHERE (LOWER(COALESCE(ap.transaction_number, '')) = $1 OR LOWER(COALESCE(ap.transaction_utr, '')) = $1)
            AND ($2::uuid IS NULL OR ap.id::text <> $2)
        ) matches
        ORDER BY created_at DESC`,
@@ -278,7 +417,31 @@ export async function findDuplicateTransactionNumber(transactionNumber: string, 
 
     return { exists: rows.length > 0, matches: rows };
   } catch (error) {
-    return { exists: false, matches: [], error: toDbError(error) };
+    try {
+      const fallbackRows = await queryRows<any>(
+        `SELECT source, id, user_id, transaction_number, transaction_id, transaction_utr, amount, created_at, sahyog_type
+         FROM (
+           SELECT 'receipts'::text AS source, r.id, r.user_id, r.transaction_number, r.transaction_id, r.transaction_utr, r.amount, r.created_at, r.sahyog_type
+           FROM receipts r
+           WHERE LOWER(COALESCE(r.transaction_number, '')) = $1
+              OR LOWER(COALESCE(r.transaction_id, '')) = $1
+              OR LOWER(COALESCE(r.transaction_utr, '')) = $1
+
+           UNION ALL
+
+           SELECT 'annual_maintenance'::text AS source, ap.id, ap.user_id, ap.transaction_number, ap.transaction_number AS transaction_id, NULL AS transaction_utr, ap.amount, ap.created_at, ap.payment_category AS sahyog_type
+           FROM annual_maintenance_payments ap
+           WHERE LOWER(COALESCE(ap.transaction_number, '')) = $1
+             AND ($2::uuid IS NULL OR ap.id::text <> $2)
+         ) matches
+         ORDER BY created_at DESC`,
+        [normalized, excludePaymentId ?? null],
+      );
+
+      return { exists: fallbackRows.length > 0, matches: fallbackRows };
+    } catch (fallbackError) {
+      return { exists: false, matches: [], error: toDbError(fallbackError) };
+    }
   }
 }
 
@@ -369,7 +532,13 @@ export async function getAnnualMaintenancePaymentById(paymentId: string) {
 
 export async function updateAnnualMaintenancePayment(paymentId: string, updates: Record<string, unknown>) {
   try {
-    const entries = Object.entries(updates).filter(([, value]) => value !== undefined);
+    const hasVerificationStatusColumn = await annualMaintenanceSupportsColumn("verification_status");
+    const hasTransactionUtrColumn = await annualMaintenanceSupportsColumn("transaction_utr");
+    const entries = Object.entries(updates)
+      .filter(([, value]) => value !== undefined)
+      .filter(([key]) => key !== "verification_status" || hasVerificationStatusColumn)
+      .filter(([key]) => key !== "transaction_utr" || hasTransactionUtrColumn);
+
     if (entries.length === 0) {
       return { data: null, error: null };
     }
@@ -402,7 +571,6 @@ export async function ensureAnnualMaintenanceReceiptRecord(paymentId: string, re
       `UPDATE annual_maintenance_payments
        SET receipt_number = COALESCE(receipt_number, $1),
            generated_receipt_path = COALESCE(generated_receipt_path, $2),
-           status = CASE WHEN status = 'pending' THEN 'approved' ELSE status END,
            updated_at = NOW()
        WHERE id = $3 AND payment_category = 'ANNUAL_MAINTENANCE'
        RETURNING *`,

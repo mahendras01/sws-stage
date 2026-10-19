@@ -6,7 +6,7 @@ import { generateReceiptPdf } from "@/lib/pdf";
 import { getLogoFile } from "@/lib/site-logo";
 import { buildProfileAddress, computeFileHash, extractPaymentDocumentData, normalizeReceiptReference, normalizeReferenceValue, validateReceiptFile } from "@/lib/receipt-extraction";
 import { findDuplicateTransactionNumber } from "@/lib/annual-maintenance";
-import fs from "node:fs/promises";
+import * as fs from "node:fs";
 import crypto from "node:crypto";
 import path from "node:path";
 
@@ -137,7 +137,7 @@ export async function POST(request: Request) {
 
     const safeFileName = `${crypto.randomUUID()}${path.extname(file.name || ".pdf") || ".pdf"}`;
     const evidenceDir = path.join(process.cwd(), "private", "receipts", "evidence");
-    await fs.mkdir(evidenceDir, { recursive: true });
+    await fs.promises.mkdir(evidenceDir, { recursive: true });
 
     const evidencePath = path.join(evidenceDir, safeFileName);
     const fileBuffer = Buffer.from(await file.arrayBuffer());
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: "This receipt image has already been uploaded. Please check the file and try a different copy." }, { status: 409 });
     }
 
-    await fs.writeFile(evidencePath, fileBuffer, { flag: "wx" });
+    await fs.promises.writeFile(evidencePath, fileBuffer, { flag: "wx" });
 
     const relativeEvidencePath = path.relative(process.cwd(), evidencePath).split(path.sep).join("/");
     const uploaderProfile = await getUserProfileById(session.user.id);
@@ -206,7 +206,7 @@ export async function POST(request: Request) {
     const { data, error } = await createReceipt(insertPayload);
     if (error) {
       try {
-        await fs.unlink(evidencePath);
+        await fs.promises.unlink(evidencePath);
       } catch {
         // ignore cleanup failures
       }
@@ -240,7 +240,13 @@ export async function POST(request: Request) {
       paid_to_district: recipientProfile.district ?? district,
     };
 
-    const logoPath = path.join(process.cwd(), "public", "images", "Self_Welfare_Society_Registration.jpg");
+    const preferredLogoNames = [
+      "Self Welfare Society Announcement Banner.png",
+      "Self_Welfare_Society_Registration.jpg",
+    ];
+    const logoPath = preferredLogoNames
+      .map((name) => path.join(process.cwd(), "public", "images", name))
+      .find((candidate) => fs.existsSync(candidate)) ?? path.join(process.cwd(), "public", "images", "Self Welfare Society Announcement Banner.png");
     const { file: managedLogo } = await getLogoFile();
     const logoBuffer = managedLogo && managedLogo.mimeType !== "image/webp" ? managedLogo.buffer : undefined;
 
@@ -280,7 +286,7 @@ export async function POST(request: Request) {
         // ignore cleanup errors
       }
       try {
-        await fs.unlink(evidencePath);
+        await fs.promises.unlink(evidencePath);
       } catch {
         // ignore cleanup errors
       }

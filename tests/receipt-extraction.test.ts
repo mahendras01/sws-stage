@@ -5,7 +5,7 @@ import test from "node:test";
 
 import { computeFileHash, extractPaymentFieldsFromText, isWorkerBasedReceiptParsingEnabled, normalizeReceiptReference, normalizeReferenceValue, validateReceiptFile } from "../lib/receipt-extraction.ts";
 import { normalizeTransactionReference, findDuplicateTransactionNumber, generateAnnualMaintenanceReceipt, normalizeAnnualMaintenancePaidToName } from "../lib/annual-maintenance.ts";
-import { ensurePdfKitFontDataFiles, generateReceiptPdf } from "../lib/pdf.ts";
+import { ensurePdfKitFontDataFiles, generateReceiptPdf, resolveDevanagariFontPath } from "../lib/pdf.ts";
 
 test("extractPaymentFieldsFromText parses a PhonePe receipt snapshot", () => {
   const sample = `
@@ -135,6 +135,14 @@ test("ensurePdfKitFontDataFiles restores the AFM files needed by PDFKit in produ
   const copied = ensurePdfKitFontDataFiles();
   assert.ok(copied.length > 0, "expected PDFKit font files to be restored");
   assert.ok(copied.some((file) => file.endsWith("Helvetica.afm")), "expected Helvetica.afm to be available");
+});
+
+test("resolveDevanagariFontPath finds a Unicode-capable Devanagari font when available", () => {
+  const resolved = resolveDevanagariFontPath();
+  if (resolved) {
+    assert.ok(fs.existsSync(resolved), "expected the discovered font path to exist");
+    assert.match(resolved, /\.(ttf|otf)$/i, "expected a TTF or OTF font file");
+  }
 });
 
 test("generateReceiptPdf can generate repeated receipts for the same seed without a filename collision", async () => {
