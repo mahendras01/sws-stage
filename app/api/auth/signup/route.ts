@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getDefaultNewUserStatus } from "@/lib/auth-flow";
-import { calculateMembershipExpiryDate, validateSignup } from "@/lib/validation";
+import { calculateMembershipExpiryDate, sanitizeSignupInput, validateSignup } from "@/lib/validation";
 import {
   createUser,
   getDepartmentById,
@@ -35,10 +35,6 @@ function getFriendlySignupError(error: unknown) {
   }
 
   return "अकाउंट बनाना विफल रहा";
-}
-
-function generatePlaceholderAadhaar() {
-  return randomInt(0, 10 ** 12).toString().padStart(12, "0");
 }
 
 function generatePlaceholderPan() {
@@ -128,7 +124,7 @@ export async function POST(request: NextRequest) {
   let userSummary: Record<string, unknown> = {};
 
   try {
-    const body = await parseSignupBody(request);
+    const body = sanitizeSignupInput(await parseSignupBody(request));
     userSummary = summarizeUser(body);
     log.info("auth.signup.received", { ...meta, user: userSummary });
 
@@ -145,9 +141,8 @@ export async function POST(request: NextRequest) {
     const pan = body.pan_number.trim().toUpperCase();
     const ehrmsCode = body.ehrms_code.trim().toUpperCase();
     const aadhar = body.aadhar_number.trim();
-    const safeAadharNumber = aadhar || generatePlaceholderAadhaar();
+    const safeAadharNumber = aadhar;
     const safePanNumber = pan || generatePlaceholderPan();
-    const safeNomineeAadhaarNumber = body.nominee_aadhar_number.trim() || null;
     const ifsc = body.bank_ifsc_code.toUpperCase();
     const houseFlatNo = body.house_flat_no.trim();
     const streetLocality = body.street_locality.trim();
@@ -157,6 +152,7 @@ export async function POST(request: NextRequest) {
     const state = body.state.trim();
     const pincode = body.pincode.trim();
     const country = body.country.trim() || "India";
+    const hasCurrentAddressDetails = Boolean(villageCity || district || state || pincode);
 
     const departmentPostValidation = await validateDepartmentPostRelationship(body.department_id, body.post_id);
     if (!departmentPostValidation.valid) {
@@ -167,19 +163,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const pincodeIsValid = await verifyPincodeMatch({
-      pincode,
-      district,
-      villageCity,
-      state,
-    });
+    if (hasCurrentAddressDetails) {
+      if (!villageCity || !district || !state || !pincode) {
+        log.warn("auth.signup.rejected", { ...meta, reason: "incomplete_current_address", user: userSummary });
+        return NextResponse.json(
+          { success: false, message: "गाँव/शहर, जिला, राज्य और पिन कोड का पूरा विवरण आवश्यक है।", errors: { pincode: "गाँव/शहर, जिला, राज्य और पिन कोड का पूरा विवरण आवश्यक है।" } },
+          { status: 400 },
+        );
+      }
 
-    if (!pincodeIsValid) {
-      log.warn("auth.signup.rejected", { ...meta, reason: "pincode_mismatch", user: userSummary });
-      return NextResponse.json(
-        { success: false, message: "पिन कोड, प्रदान किए गए जिले, गाँव/शहर या राज्य से मेल नहीं खाता।", errors: { pincode: "पिन कोड, दिए गए पता विवरण से मेल नहीं खाता।" } },
-        { status: 400 },
-      );
+      const pincodeIsValid = await verifyPincodeMatch({
+        pincode,
+        district,
+        villageCity,
+        state,
+      });
+
+      if (!pincodeIsValid) {
+        log.warn("auth.signup.rejected", { ...meta, reason: "pincode_mismatch", user: userSummary });
+        return NextResponse.json(
+          { success: false, message: "पिन कोड, प्रदान किए गए जिले, गाँव/शहर या राज्य से मेल नहीं खाता।", errors: { pincode: "पिन कोड, दिए गए पता विवरण से मेल नहीं खाता।" } },
+          { status: 400 },
+        );
+      }
     }
 
     const { data: existingEmail } = await getUserByEmail(email);
@@ -241,13 +247,12 @@ export async function POST(request: NextRequest) {
       nominee_name: body.nominee_name.trim(),
       nominee_relationship: body.nominee_relationship.trim(),
       nominee_mobile_number: body.nominee_mobile_number.trim(),
-      nominee_aadhar_number: safeNomineeAadhaarNumber,
       reference_name: body.reference_name?.trim() || null,
       bank_account_number: body.bank_account_number || "",
       bank_ifsc_code: ifsc || "",
       bank_holder_name: body.bank_holder_name.trim() || "",
       phone_number: body.phone_number.trim(),
-      blood_group: body.blood_group.trim(),
+      blood_group: body.blood_group?.trim() || null,
       house_flat_no: houseFlatNo,
       street_locality: streetLocality,
       landmark: landmark || null,
@@ -256,15 +261,15 @@ export async function POST(request: NextRequest) {
       state,
       pincode,
       country,
-      permanent_same_as_current: body.permanent_same_as_current ?? false,
-      permanent_house_flat_no: body.permanent_same_as_current ? houseFlatNo : (body.permanent_house_flat_no ?? "").trim(),
-      permanent_street_locality: body.permanent_same_as_current ? streetLocality : (body.permanent_street_locality ?? "").trim(),
-      permanent_landmark: body.permanent_same_as_current ? (landmark || null) : (body.permanent_landmark ?? "").trim() || null,
-      permanent_village_city: body.permanent_same_as_current ? villageCity : (body.permanent_village_city ?? "").trim(),
-      permanent_district: body.permanent_same_as_current ? district : (body.permanent_district ?? "").trim(),
-      permanent_state: body.permanent_same_as_current ? state : (body.permanent_state ?? "").trim(),
-      permanent_pincode: body.permanent_same_as_current ? pincode : (body.permanent_pincode ?? "").trim(),
-      permanent_country: body.permanent_same_as_current ? country : (body.permanent_country ?? "India").trim() || "India",
+      permanent_same_as_current: false,
+      permanent_house_flat_no: (body.permanent_house_flat_no ?? "").trim(),
+      permanent_street_locality: (body.permanent_street_locality ?? "").trim(),
+      permanent_landmark: (body.permanent_landmark ?? "").trim() || null,
+      permanent_village_city: (body.permanent_village_city ?? "").trim(),
+      permanent_district: (body.permanent_district ?? "").trim(),
+      permanent_state: (body.permanent_state ?? "").trim(),
+      permanent_pincode: (body.permanent_pincode ?? "").trim(),
+      permanent_country: (body.permanent_country ?? "India").trim() || "India",
       status: getDefaultNewUserStatus(),
     });
 

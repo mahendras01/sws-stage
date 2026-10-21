@@ -8,6 +8,23 @@ export function normalizePincode(value: string): string {
   return value.replace(/\D/g, "").slice(0, 6);
 }
 
+export function deriveAddressFromPincodeOptions(
+  options: PincodeLocationOption[],
+  fallback: { village_city: string; district: string; state: string } = { village_city: "", district: "", state: "" },
+): { village_city: string; district: string; state: string } {
+  if (options.length === 0) {
+    return fallback;
+  }
+
+  const firstOption = options[0];
+
+  return {
+    village_city: firstOption.name.trim() || fallback.village_city,
+    district: firstOption.district.trim() || fallback.district,
+    state: firstOption.state.trim() || fallback.state,
+  };
+}
+
 export async function lookupPincodeDetails(pincode: string): Promise<PincodeLocationOption[]> {
   const normalized = normalizePincode(pincode);
 

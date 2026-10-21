@@ -20,7 +20,7 @@ export default async function Header() {
             </div>
           )}
           <div>
-            <h1 className="text-lg font-semibold text-gray-900">Self-Welfare Society</h1>
+            <h1 className="text-lg font-semibold text-gray-900">Self Welfare Society</h1>
             <p className="text-sm text-gray-600">Community support for families in need</p>
           </div>
         </div>

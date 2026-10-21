@@ -10,8 +10,6 @@ const publicMenuItems: Array<{ href: string; label: string }> = [
   { href: "/about-us", label: "ABOUT US" },
   { href: "/gallery", label: "GALLERY" },
   { href: "/sahyog-list", label: "SAHYOG LIST" },
-  { href: "/jivandan-list", label: "JIVANDAN LIST" },
-  { href: "/kanyadan-list", label: "KANYADAN LIST" },
   { href: "/contact", label: "CONTACT" },
   { href: "/login", label: "LOGIN" },
   { href: "/signup", label: "REGISTER" },
