@@ -32,7 +32,23 @@ type UserData = {
   paid_to_district?: string | null;
 };
 
-type PdfOptions = { logoPath?: string; logoBuffer?: Buffer };
+type PdfOptions = { logoPath?: string; logoBuffer?: Buffer; outputPath?: string };
+
+function normalizeCurrencyAmount(rawValue: unknown): string {
+  const text = String(rawValue ?? 0).trim();
+  const cleaned = text.replace(/[^\d.\-]/g, "");
+  if (!cleaned || cleaned === "." || cleaned === "-") {
+    return "0.00";
+  }
+
+  const normalized = cleaned.replace(/(?<=\d)-(?=\d)/g, "");
+  const numeric = Number(normalized);
+  if (!Number.isFinite(numeric)) {
+    return "0.00";
+  }
+
+  return numeric.toFixed(2);
+}
 
 export function ensurePdfKitFontDataFiles(): string[] {
   const sourceDataDir = path.join(process.cwd(), "node_modules", "pdfkit", "js", "data");
@@ -143,17 +159,58 @@ export function resolveDevanagariFontPath(): string | null {
   return null;
 }
 
+export function resolveUnicodeCurrencyFontPath(): string | null {
+  const customCandidates = [
+    process.env.PDF_UNICODE_FONT_PATH,
+    process.env.PDF_CURRENCY_FONT_PATH,
+    "/System/Library/Fonts/SFNS.ttf",
+    "/System/Library/Fonts/SFNSDisplay.ttf",
+    "/System/Library/Fonts/SFNSMono.ttf",
+    "/Library/Fonts/Arial Unicode.ttf",
+    "/System/Library/Fonts/Arial Unicode.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    path.join(process.cwd(), "public", "fonts", "ArialUnicode.ttf"),
+    path.join(process.cwd(), "public", "fonts", "Arial Unicode.ttf"),
+  ].filter((value): value is string => Boolean(value));
+
+  const fontFilePattern = /\.(ttf|otf|ttc|otc)$/i;
+
+  for (const candidate of customCandidates) {
+    if (fs.existsSync(candidate) && fontFilePattern.test(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 function asDisplay(value: unknown) {
   if (value === null || value === undefined) return "-";
   const text = String(value).trim();
   return text || "-";
 }
 
+export function getCanonicalReceiptPdfRelativePath(receipt: Partial<ReceiptData>): string {
+  const seed = String(receipt.receipt_number ?? receipt.transaction_number ?? receipt.transaction_id ?? receipt.id ?? crypto.randomUUID());
+  const safeBaseName = `SWS-REC-${seed.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
+  return path.join("private", "receipts", "pdf", `${safeBaseName}.pdf`);
+}
+
+export function isPdfPath(value?: string | null): boolean {
+  if (!value) return false;
+  return path.extname(value).toLowerCase() === ".pdf";
+}
+
 export async function generateReceiptPdf(receipt: ReceiptData, user: UserData, options?: PdfOptions) {
   ensurePdfKitFontDataFiles();
 
+  const requestedOutputPath = options?.outputPath ? path.resolve(process.cwd(), options.outputPath) : null;
   const outDir = path.join(process.cwd(), "private", "receipts", "pdf");
-  await fs.promises.mkdir(outDir, { recursive: true });
+  await fs.promises.mkdir(requestedOutputPath ? path.dirname(requestedOutputPath) : outDir, { recursive: true });
+
+  if (requestedOutputPath) {
+    return createPdfAtPath(requestedOutputPath, receipt, user, options);
+  }
 
   const seed = String(receipt.receipt_number ?? receipt.transaction_number ?? receipt.transaction_id ?? receipt.id ?? crypto.randomUUID());
   const safeBaseName = `SWS-REC-${seed.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
@@ -165,18 +222,64 @@ export async function generateReceiptPdf(receipt: ReceiptData, user: UserData, o
   return createPdfAtPath(outPath, receipt, user, options);
 }
 
+export async function regenerateStoredReceiptPdf(receipt: Partial<ReceiptData> & { receipt_file_path?: string | null }, user: UserData, relPath?: string | null) {
+  const fallbackPdfPath = getCanonicalReceiptPdfRelativePath(receipt);
+  const sanitizedTargetPath = relPath && isPdfPath(relPath)
+    ? relPath
+    : fallbackPdfPath;
+  const targetPath = path.resolve(process.cwd(), sanitizedTargetPath);
+  if (!targetPath) {
+    return null;
+  }
+
+  const normalizedUser = {
+    ...user,
+    name: user.name ?? receipt.paid_by_name ?? "Donor",
+    phone_number: user.phone_number ?? null,
+    email: user.email ?? null,
+  };
+
+  const refreshedRelativePath = await generateReceiptPdf({
+    receipt_number: receipt.receipt_number,
+    transaction_number: receipt.transaction_number,
+    transaction_id: receipt.transaction_id,
+    transaction_utr: receipt.transaction_utr,
+    payment_provider: receipt.payment_provider,
+    amount: receipt.amount,
+    created_at: receipt.created_at,
+    id: receipt.id,
+    user_id: receipt.user_id,
+    transaction_date: receipt.transaction_date,
+    sahyog_type: receipt.sahyog_type,
+    paid_by_name: receipt.paid_by_name,
+    paid_by_district: receipt.paid_by_district,
+    paid_to_name: receipt.paid_to_name,
+    paid_to_district: receipt.paid_to_district,
+  }, normalizedUser, { outputPath: sanitizedTargetPath });
+
+  return refreshedRelativePath;
+}
+
 function createPdfAtPath(fullPath: string, receipt: ReceiptData, user: UserData, options?: PdfOptions) {
   return new Promise<string>((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", margin: 48 });
+    const doc = new PDFDocument({ size: "A4", margin: 36 });
     const stream = fs.createWriteStream(fullPath, { flags: "w" });
     const devanagariFontPath = resolveDevanagariFontPath();
+    const unicodeFontPath = resolveUnicodeCurrencyFontPath();
 
     if (devanagariFontPath) {
       try {
         doc.registerFont("DevanagariReceiptFont", devanagariFontPath);
-        doc.font("DevanagariReceiptFont");
       } catch {
         // Ignore invalid font registrations and fall back to default PDF fonts.
+      }
+    }
+
+    if (unicodeFontPath) {
+      try {
+        doc.registerFont("SWSUnicodeFont", unicodeFontPath);
+      } catch {
+        // Ignore invalid font registrations and fall back to the built-in PDF fonts.
       }
     }
 
@@ -193,60 +296,85 @@ function createPdfAtPath(fullPath: string, receipt: ReceiptData, user: UserData,
 
     const pageWidth = doc.page.width;
     const pageHeight = doc.page.height;
+    const leftX = 70;
+    const rightX = pageWidth - 70;
+    const contentWidth = pageWidth - 140;
+    const textColor = "#0d4d8d";
+    const accentColor = "#f28b3a";
+    const mutedText = "#4d5d6d";
+    const isDevanagariText = (value: string) => /[\u0900-\u097F]/.test(value);
+
     doc.save();
-    doc.lineWidth(2).rect(24, 24, pageWidth - 48, pageHeight - 48).stroke();
+    doc.lineWidth(1.5).strokeColor(accentColor).dash(1, { space: 4 }).rect(20, 20, pageWidth - 40, pageHeight - 40).stroke();
+    doc.undash();
 
-    let logoDrawn = false;
-    if (options?.logoBuffer) {
-      try {
-        doc.image(options.logoBuffer, 60, 60, { fit: [80, 60] });
-        logoDrawn = true;
-      } catch {
-        // ignore
-      }
-    }
-    if (!logoDrawn && options?.logoPath && fs.existsSync(options.logoPath)) {
-      try {
-        doc.image(options.logoPath, 60, 60, { width: 80 });
-      } catch {
-        // ignore
-      }
-    }
+    const donationToName = asDisplay(receipt.paid_to_name ?? user.paid_to_name ?? "Self Welfare Society");
+    const donorName = asDisplay(receipt.paid_by_name ?? user.paid_by_name ?? user.name ?? "Donor");
+    const donorMobile = asDisplay(user.phone_number ?? "-");
+    const donorEmail = asDisplay(user.email ?? "-");
+    const donatedAmount = normalizeCurrencyAmount(receipt.amount ?? 0);
+    const formattedAmount = `₹${donatedAmount}`;
+    const donationDate = asDisplay(new Date().toISOString().slice(0, 10));
+    const transactionId = asDisplay(receipt.transaction_id ?? receipt.transaction_number ?? receipt.transaction_utr ?? receipt.receipt_number ?? "-");
+    const causeForDonation = "VYWASTHA SHULK";
 
-    doc.fontSize(18).text("Self-Welfare Society", 160, 60);
-    doc.fontSize(10).fillColor("#444").text("Helpline: +91-7080329999", 160, 86);
-    doc.fontSize(14).fillColor("#000").text("Acknowledgement Receipt", { align: "center" });
-    doc.moveDown(0.5);
+    const lineY = [224, 262, 300, 338, 376, 414];
 
-    const leftX = 60;
-    let y = 160;
-    const labelWidth = 150;
-    const valueX = leftX + labelWidth + 10;
-    const printValue = (label: string, value: unknown) => {
-      doc.fontSize(10).fillColor("#333").text(`${label}:`, leftX, y);
-      doc.fontSize(9.5).fillColor("#111").text(asDisplay(value), valueX, y, { width: 380, lineGap: 2 });
-      y += 20;
+    const drawWatermark = () => {
+      const watermarkText = "SELF WELFARE SOCIETY";
+      const watermarkWidth = pageWidth * 1.3;
+      const x = (pageWidth - watermarkWidth) / 2;
+      const y = (pageHeight - 60) / 2;
+
+      doc.save();
+      doc.rotate(-45, { origin: [pageWidth / 2, pageHeight / 2] });
+      doc.opacity(0.08);
+      doc.fillColor("#0d4d8d");
+      doc.font("Helvetica-Bold").fontSize(46).text(watermarkText, x, y, {
+        width: watermarkWidth,
+        align: "center",
+      });
+      doc.restore();
     };
 
-    printValue("Receipt Number", receipt.receipt_number ?? receipt.transaction_number ?? receipt.transaction_id ?? "-");
-    printValue("Transaction ID", receipt.transaction_id ?? "-");
-    printValue("Transaction Number", receipt.transaction_number ?? "-");
-    printValue("UTR / Bank Ref", receipt.transaction_utr ?? "-");
-    printValue("Payment Provider", receipt.payment_provider ?? "-");
-    printValue("Amount", `₹ ${asDisplay(receipt.amount).replace(/^₹\s*/, "")}`);
-    printValue("Transaction Date", receipt.transaction_date ?? (receipt.created_at ? new Date(receipt.created_at).toISOString().slice(0, 10) : "-"));
-    printValue("Issue Date", receipt.created_at ? new Date(receipt.created_at).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
-    printValue("Paid By", receipt.paid_by_name ?? user.paid_by_name ?? user.name ?? "-");
-    printValue("Paid To", receipt.paid_to_name ?? user.paid_to_name ?? "-");
-    printValue("District", receipt.paid_by_district ?? user.paid_by_district ?? "-");
-    printValue("Member Name", user.name ?? "-");
-    printValue("Mobile", user.phone_number ?? "-");
-    printValue("Email", user.email ?? "-");
-    printValue("Address", user.address ?? "-");
-    printValue("Sahyog Type", receipt.sahyog_type ?? "General");
+    const drawHeader = () => {
+      doc.font("Helvetica-Bold").fillColor(accentColor).fontSize(28).text("SELF WELFARE SOCIETY", 0, 52, { align: "center" });
+      doc.font("Helvetica").fillColor(textColor).fontSize(10).text("Founded in 2026 under the society registration (Reg. No - LUC/01051/2026-2027)", 0, 88, { align: "center" });
+      doc.moveTo(110, 106).lineTo(pageWidth - 110, 106).strokeColor(accentColor).lineWidth(1.4).stroke();
+      doc.fillOpacity(1);
+    };
 
-    doc.moveDown(2);
-    doc.fontSize(11).fillColor("#0b563d").text("Thank You For Your Contribution", 0, pageHeight - 110, { align: "center" });
+    const drawRow = (label: string, value: string, y: number) => {
+      const valueFont = devanagariFontPath && isDevanagariText(value)
+        ? "DevanagariReceiptFont"
+        : unicodeFontPath && /[₹]/.test(value)
+          ? "SWSUnicodeFont"
+          : "Helvetica";
+      doc.font("Helvetica-Bold").fillColor(textColor).fontSize(12).text(`${label}:`, leftX, y, { width: 180, continued: false });
+      doc.font(valueFont).fillColor("#1d1d1d").fontSize(12).text(value, 230, y, { width: pageWidth - 280, lineGap: 2 });
+      doc.moveTo(leftX, y + 18).lineTo(rightX, y + 18).strokeColor(accentColor).dash(1, { space: 4 }).lineWidth(1).stroke();
+      doc.undash();
+    };
+
+    drawWatermark();
+    drawHeader();
+
+    doc.font("Helvetica-Bold").fillColor(textColor).fontSize(16).text(`Thank You For Donation Sh./Smt./M/S: ${donorName}`, leftX, 130, { width: contentWidth, align: "left" });
+
+    const rows: Array<[string, string]> = [
+      ["Mobile", donorMobile],
+      ["Email", donorEmail],
+      ["Donated Amount", formattedAmount],
+      ["Date", donationDate],
+      ["Transaction ID", transactionId],
+      ["Reason For Donation", causeForDonation],
+    ];
+
+    rows.forEach(([label, value], index) => {
+      drawRow(label, value, lineY[index]);
+    });
+
+    doc.font("Helvetica-Bold").fillColor(accentColor).fontSize(22).text("THANK YOU FOR YOUR DONATION", 0, pageHeight - 86, { align: "center" });
     doc.end();
   });
 }

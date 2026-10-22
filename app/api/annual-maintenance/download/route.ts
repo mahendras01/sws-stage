@@ -3,7 +3,8 @@ import fs from "fs";
 import path from "path";
 import { requireAuth } from "@/lib/auth";
 import { canAccessReceiptForUser } from "@/lib/receipt-access";
-import { getAnnualMaintenancePaymentById } from "@/lib/annual-maintenance";
+import { getAnnualMaintenancePaymentById, updateAnnualMaintenancePayment } from "@/lib/annual-maintenance";
+import { getCanonicalReceiptPdfRelativePath, isPdfPath, regenerateStoredReceiptPdf } from "@/lib/pdf";
 
 export async function GET(request: Request) {
   const auth = await requireAuth();
@@ -26,12 +27,48 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
   }
 
-  const relPath = payment.generated_receipt_path ?? payment.payment_receipt_path;
-  if (!relPath) {
-    return NextResponse.json({ success: false, message: "No generated receipt available" }, { status: 404 });
+  const currentPdfPath = payment.generated_receipt_path && isPdfPath(payment.generated_receipt_path)
+    ? payment.generated_receipt_path
+    : getCanonicalReceiptPdfRelativePath({
+        receipt_number: payment.receipt_number,
+        transaction_number: payment.transaction_number,
+        transaction_id: payment.transaction_number,
+        amount: payment.amount,
+        created_at: payment.created_at,
+        id: payment.id,
+        user_id: payment.user_id,
+        transaction_date: payment.payment_date ?? payment.created_at,
+        sahyog_type: "Annual Maintenance",
+        paid_by_name: payment.user_name ?? auth.session.user.name ?? null,
+        paid_to_name: payment.paid_to_name ?? "Registration Money",
+      });
+
+  const refreshedPdfPath = await regenerateStoredReceiptPdf({
+    receipt_number: payment.receipt_number,
+    transaction_number: payment.transaction_number,
+    transaction_id: payment.transaction_number,
+    amount: payment.amount,
+    created_at: payment.created_at,
+    id: payment.id,
+    user_id: payment.user_id,
+    transaction_date: payment.payment_date ?? payment.created_at,
+    sahyog_type: "Annual Maintenance",
+    paid_by_name: payment.user_name ?? auth.session.user.name ?? null,
+    paid_to_name: payment.paid_to_name ?? "Registration Money",
+  }, {
+    name: payment.user_name ?? auth.session.user.name ?? null,
+    phone_number: payment.user_phone ?? null,
+    email: payment.user_email ?? auth.session.user.email ?? null,
+    paid_by_name: payment.user_name ?? auth.session.user.name ?? null,
+    paid_to_name: payment.paid_to_name ?? "Registration Money",
+  }, currentPdfPath);
+
+  const finalPdfPath = refreshedPdfPath ?? currentPdfPath;
+  if (payment.id && payment.generated_receipt_path !== finalPdfPath) {
+    await updateAnnualMaintenancePayment(payment.id, { generated_receipt_path: finalPdfPath });
   }
 
-  const abs = path.resolve(process.cwd(), relPath);
+  const abs = path.resolve(process.cwd(), finalPdfPath);
   const allowedDirs = [
     path.resolve(process.cwd(), "private", "receipts", "pdf"),
     path.resolve(process.cwd(), "annual_maintenance_receipts"),
@@ -43,7 +80,7 @@ export async function GET(request: Request) {
 
   try {
     const dataBuf = await fs.promises.readFile(abs);
-    const fileName = path.basename(abs) || "annual-maintenance-receipt.pdf";
+    const fileName = `${path.basename(finalPdfPath, ".pdf") || "annual-maintenance-receipt"}.pdf`;
     return new Response(dataBuf, {
       status: 200,
       headers: {

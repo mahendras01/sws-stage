@@ -115,20 +115,20 @@ export default function Navbar() {
               </button>
 
               {uploadOpen && (
-                <div className="absolute left-0 mt-2 w-44 rounded-xl border bg-white p-2 shadow-lg">
+                <div className="absolute left-0 mt-2 w-52 rounded-xl border bg-white p-2 shadow-lg">
                   <Link
-                    href="/upload-receipt"
+                    href="/upload-annual-maintenance-receipt"
                     onClick={() => setUploadOpen(false)}
                     className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
                   >
-                    Upload Sahyog Receipt
+                    UPLOAD ANNUAL MAINTENANCE SAHYOG RECEIPT
                   </Link>
                   <Link
                     href="/view-sahyog-receipt"
                     onClick={() => setUploadOpen(false)}
                     className="mt-1 block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
                   >
-                    View Sahyog Receipt
+                    VIEW SAHYOG RECEIPT
                   </Link>
                 </div>
               )}
@@ -239,18 +239,18 @@ export default function Navbar() {
             {session && (
               <>
                 <Link
-                  href="/upload-receipt"
+                  href="/upload-annual-maintenance-receipt"
                   onClick={() => setMenuOpen(false)}
                   className="rounded-lg px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-700"
                 >
-                  Upload Sahyog Receipt
+                  UPLOAD ANNUAL MAINTENANCE SAHYOG RECEIPT
                 </Link>
                 <Link
                   href="/view-sahyog-receipt"
                   onClick={() => setMenuOpen(false)}
                   className="rounded-lg px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-700"
                 >
-                  View Sahyog Receipt
+                  VIEW SAHYOG RECEIPT
                 </Link>
               </>
             )}

@@ -3,7 +3,8 @@ import path from "path";
 import fs from "fs";
 import { requireAuth } from "@/lib/auth";
 import { canAccessReceiptForUser } from "@/lib/receipt-access";
-import { getReceiptById } from "@/lib/db";
+import { getReceiptById, updateReceipt } from "@/lib/db";
+import { getCanonicalReceiptPdfRelativePath, isPdfPath, regenerateStoredReceiptPdf } from "@/lib/pdf";
 
 export async function GET(request: Request) {
   const auth = await requireAuth();
@@ -22,10 +23,26 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
   }
 
-  const relPath = receipt.receipt_file_path ?? receipt.uploaded_file_path;
-  if (!relPath) return NextResponse.json({ success: false, message: "No generated PDF available" }, { status: 404 });
+  const currentPdfPath = receipt.receipt_file_path && isPdfPath(receipt.receipt_file_path)
+    ? receipt.receipt_file_path
+    : getCanonicalReceiptPdfRelativePath(receipt);
 
-  const abs = path.resolve(process.cwd(), relPath);
+  const effectiveUser = {
+    name: receipt.paid_by_name ?? session.user.name ?? null,
+    phone_number: receipt.phone_number ?? null,
+    email: receipt.email ?? session.user.email ?? null,
+    paid_by_name: receipt.paid_by_name ?? null,
+    paid_to_name: receipt.paid_to_name_display ?? receipt.paid_to_name ?? null,
+  };
+
+  const refreshedPdfPath = await regenerateStoredReceiptPdf(receipt, effectiveUser, currentPdfPath);
+  const finalPdfPath = refreshedPdfPath ?? currentPdfPath;
+
+  if (receipt.id && receipt.receipt_file_path !== finalPdfPath) {
+    await updateReceipt(receipt.id, { receipt_file_path: finalPdfPath });
+  }
+
+  const abs = path.resolve(process.cwd(), finalPdfPath);
   const allowedDirs = [
     path.resolve(process.cwd(), "private", "receipts"),
     path.resolve(process.cwd(), "new_payment_recipt"),
@@ -37,7 +54,7 @@ export async function GET(request: Request) {
 
   try {
     const dataBuf = await fs.promises.readFile(abs);
-    const fileName = path.basename(abs);
+    const fileName = `${path.basename(finalPdfPath, ".pdf") || "receipt"}.pdf`;
     return new Response(dataBuf, {
       status: 200,
       headers: {

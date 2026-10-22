@@ -24,6 +24,7 @@ export default function AdminSidebar() {
     : [
         { href: "/admin", label: "Dashboard", exact: true },
         ...(isSuperAdmin ? [{ href: "/admin/approve-members", label: "Pending Approvals" }] : []),
+        ...(isSuperAdmin ? [{ href: "/admin/payment-approvals", label: "Payment Approvals" }] : []),
         ...(isCountryLevelAdmin ? [{ href: "/admin/nominee-edit-requests", label: "Nominee Change Requests" }] : []),
         { href: "/admin/registered-members", label: "Registered Members" },
         { href: "/admin/add-death", label: "Add Labharthi Records" },

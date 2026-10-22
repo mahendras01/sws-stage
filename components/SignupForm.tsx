@@ -591,9 +591,8 @@ export default function SignupForm() {
     const isError = Boolean(errors[field.name]);
     const isRequired = requiredFieldNames.has(field.name);
     const isVillageSelect = field.name === "village_city" && pincodeOptions.length > 1;
-    const isPermanentVillageSelect = field.name === "permanent_village_city" && permanentVillageCityOptions.length > 0;
 
-    if (field.type === "select" || isVillageSelect || isPermanentVillageSelect) {
+    if (field.type === "select" || isVillageSelect) {
       let selectOptions: Array<{ value: string; label: string }> = [];
 
       if (field.name === "gender") {
@@ -604,8 +603,6 @@ export default function SignupForm() {
         selectOptions = departmentPosts.map((option) => ({ value: option.id, label: option.name }));
       } else if (isVillageSelect) {
         selectOptions = pincodeOptions.map((option) => ({ value: option.name, label: option.name }));
-      } else if (isPermanentVillageSelect) {
-        selectOptions = permanentVillageCityOptions.map((option) => ({ value: option.name, label: option.name }));
       } else {
         selectOptions = stateOptions.map((option) => ({ value: option, label: option }));
       }
@@ -627,7 +624,7 @@ export default function SignupForm() {
             className={`input-field ${isError ? "border-danger" : ""} ${field.name === "post_id" && (!form.department_id || departmentPosts.length === 0) ? "cursor-not-allowed opacity-60" : ""}`}
           >
             <option value="">
-              {field.name === "gender" ? "Select gender" : field.name === "department_id" ? "Select Department" : field.name === "post_id" ? "Select Post" : isVillageSelect || isPermanentVillageSelect ? "Select village/city" : "Select state"}
+              {field.name === "gender" ? "Select gender" : field.name === "department_id" ? "Select Department" : field.name === "post_id" ? "Select Post" : isVillageSelect ? "Select village/city" : "Select state"}
             </option>
             {selectOptions.map((option) => (
               <option key={option.value} value={option.value}>

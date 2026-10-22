@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
 import { computeFileHash, extractPaymentFieldsFromText, isWorkerBasedReceiptParsingEnabled, normalizeReceiptReference, normalizeReferenceValue, validateReceiptFile } from "../lib/receipt-extraction.ts";
 import { normalizeTransactionReference, findDuplicateTransactionNumber, generateAnnualMaintenanceReceipt, normalizeAnnualMaintenancePaidToName } from "../lib/annual-maintenance.ts";
-import { ensurePdfKitFontDataFiles, generateReceiptPdf, resolveDevanagariFontPath } from "../lib/pdf.ts";
+import { ensurePdfKitFontDataFiles, generateReceiptPdf, regenerateStoredReceiptPdf, resolveDevanagariFontPath } from "../lib/pdf.ts";
 
 test("extractPaymentFieldsFromText parses a PhonePe receipt snapshot", () => {
   const sample = `
@@ -164,6 +165,134 @@ test("resolveDevanagariFontPath finds a Unicode-capable Devanagari font when ava
     assert.ok(fs.existsSync(resolved), "expected the discovered font path to exist");
     assert.match(resolved, /\.(ttf|otf|ttc|otc)$/i, "expected a supported Devanagari font file");
   }
+});
+
+test("generateReceiptPdf does not embed the superscript fallback character in the amount text", async () => {
+  const receiptData = {
+    receipt_number: "PDF-TEST-CHARACTER-CASE",
+    transaction_number: "TXN-BAD-CHAR",
+    transaction_id: "TXN-BAD-CHAR",
+    amount: 1,
+    created_at: new Date().toISOString(),
+    sahyog_type: "General",
+    paid_by_name: "Test User",
+    paid_by_district: "Lucknow",
+    paid_to_name: "Self Welfare Society",
+    paid_to_district: "Lucknow",
+  };
+
+  const outputPath = path.join(process.cwd(), "private", "receipts", "pdf", "SWS-REC-FONT-TEST.pdf");
+  const pdfOutput = await generateReceiptPdf(receiptData, {
+    name: "Test User",
+    phone_number: "9999999999",
+    email: "test@example.com",
+    address: "1 Main Street, Lucknow",
+    paid_by_name: "Test User",
+    paid_by_district: "Lucknow",
+    paid_to_name: "Self Welfare Society",
+    paid_to_district: "Lucknow",
+  }, { outputPath });
+
+  assert.ok(pdfOutput.startsWith("private/receipts/pdf/"));
+  const pdfFilePath = path.join(process.cwd(), pdfOutput);
+  const extractedText = execFileSync("python3", [
+    "-c",
+    `from pypdf import PdfReader
+from io import BytesIO
+import sys
+pdf_bytes = open(sys.argv[1], 'rb').read()
+reader = PdfReader(BytesIO(pdf_bytes))
+text = "\\n".join(page.extract_text() or "" for page in reader.pages)
+print(text)
+`,
+    pdfFilePath,
+  ], { encoding: "utf8" });
+
+  assert.ok(!extractedText.includes("¹"), "expected the superscript fallback character to be absent from the rendered PDF text");
+  assert.match(extractedText, /₹\s*1\.00|Rs\.?\s*1\.00|INR\s*1\.00/i, "expected the rupee amount to render correctly in the actual PDF text");
+
+  await fs.promises.unlink(path.join(process.cwd(), pdfOutput)).catch(() => undefined);
+});
+
+test("regenerateStoredReceiptPdf refreshes stale JPG receipt artifacts into valid PDFs", async () => {
+  const staleRelativePath = path.join("private", "receipts", "evidence", "legacy-receipt.jpg");
+  const staleAbsolutePath = path.join(process.cwd(), staleRelativePath);
+  await fs.promises.mkdir(path.dirname(staleAbsolutePath), { recursive: true });
+  await fs.promises.writeFile(staleAbsolutePath, Buffer.from("not-a-pdf"));
+
+  const refreshedPath = await regenerateStoredReceiptPdf({
+    receipt_number: "LEGACY-RECEIPT-123",
+    transaction_number: "TXN-LEGACY-123",
+    transaction_id: "TXN-LEGACY-123",
+    amount: 50,
+    created_at: new Date().toISOString(),
+    sahyog_type: "General",
+    paid_by_name: "Legacy Donor",
+    paid_to_name: "Self Welfare Society",
+  }, {
+    name: "Legacy Donor",
+    phone_number: "9999999999",
+    email: "legacy@example.com",
+    paid_by_name: "Legacy Donor",
+    paid_to_name: "Self Welfare Society",
+  }, staleRelativePath);
+
+  assert.ok(refreshedPath, "expected a refreshed PDF path to be returned");
+  assert.match(refreshedPath, /^private\/receipts\/pdf\//, "expected the canonical PDF directory to be used");
+  assert.ok(refreshedPath.endsWith(".pdf"), "expected the refreshed receipt path to end in .pdf");
+
+  const pdfFile = path.join(process.cwd(), refreshedPath);
+  assert.ok(fs.existsSync(pdfFile), "expected the regenerated receipt PDF to exist");
+  assert.equal(fs.readFileSync(pdfFile).subarray(0, 5).toString("ascii"), "%PDF-", "expected a real PDF signature");
+
+  await fs.promises.unlink(staleAbsolutePath).catch(() => undefined);
+  await fs.promises.unlink(pdfFile).catch(() => undefined);
+});
+
+test("generateReceiptPdf adds the diagonal SELF WELFARE SOCIETY watermark to the actual PDF output", async () => {
+  const receiptData = {
+    receipt_number: "PDF-WATERMARK-CASE",
+    transaction_number: "TXN-WATERMARK-CASE",
+    transaction_id: "TXN-WATERMARK-CASE",
+    amount: 50,
+    created_at: new Date().toISOString(),
+    sahyog_type: "General",
+    paid_by_name: "Watermark User",
+    paid_by_district: "Lucknow",
+    paid_to_name: "Self Welfare Society",
+    paid_to_district: "Lucknow",
+  };
+
+  const outputPath = path.join(process.cwd(), "private", "receipts", "pdf", "SWS-REC-WATERMARK-TEST.pdf");
+  const pdfOutput = await generateReceiptPdf(receiptData, {
+    name: "Watermark User",
+    phone_number: "9999999999",
+    email: "watermark@example.com",
+    address: "1 Main Street, Lucknow",
+    paid_by_name: "Watermark User",
+    paid_by_district: "Lucknow",
+    paid_to_name: "Self Welfare Society",
+    paid_to_district: "Lucknow",
+  }, { outputPath });
+
+  assert.ok(pdfOutput.startsWith("private/receipts/pdf/"));
+  const pdfFilePath = path.join(process.cwd(), pdfOutput);
+  const extractedText = execFileSync("python3", [
+    "-c",
+    `from pypdf import PdfReader
+from io import BytesIO
+import sys
+pdf_bytes = open(sys.argv[1], 'rb').read()
+reader = PdfReader(BytesIO(pdf_bytes))
+text = "\\n".join(page.extract_text() or "" for page in reader.pages)
+print(text)
+`,
+    pdfFilePath,
+  ], { encoding: "utf8" });
+
+  assert.match(extractedText, /SELF WELFARE SOCIETY/i, "expected the watermark text to appear in the actual PDF output");
+
+  await fs.promises.unlink(path.join(process.cwd(), pdfOutput)).catch(() => undefined);
 });
 
 test("generateReceiptPdf can generate repeated receipts for the same seed without a filename collision", async () => {

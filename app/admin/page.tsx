@@ -51,6 +51,11 @@ export default function AdminDashboardPage() {
           <p className="mt-2 text-3xl font-bold text-primary">{stats?.pendingUsers ?? 0}</p>
         </Link>
 
+        <Link href="/admin/payment-approvals" className="card transition-shadow hover:shadow-md">
+          <p className="text-sm font-medium text-neutral">Payment Approvals</p>
+          <p className="mt-2 text-lg font-semibold text-primary">Review pending payments</p>
+        </Link>
+
         <Link href="/admin/registered-members" className="card transition-shadow hover:shadow-md">
           <p className="text-sm font-medium text-neutral">Registered Members</p>
           <p className="mt-2 text-3xl font-bold text-gray-900">{stats?.approvedUsers ?? 0}</p>

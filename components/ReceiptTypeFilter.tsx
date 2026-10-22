@@ -18,6 +18,8 @@ export default function ReceiptTypeFilter({
     const nextValue = event.target.value;
     const params = new URLSearchParams(searchParams.toString());
 
+    params.delete("page");
+
     if (nextValue === "All") {
       params.delete("receiptType");
     } else {

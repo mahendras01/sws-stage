@@ -1,6 +1,7 @@
 import { getSession, canViewAllSahyogReceipts } from "@/lib/auth";
 import { normalizeAnnualMaintenancePaidToName } from "@/lib/annual-maintenance";
 import { getReceiptsByUser } from "@/lib/db";
+import { buildReceiptPagination, paginateItems } from "@/lib/pagination";
 import ReceiptCard from "@/components/ReceiptCard";
 import ReceiptTypeFilter from "@/components/ReceiptTypeFilter";
 import React from "react";
@@ -11,7 +12,7 @@ import { queryRows } from "@/lib/postgres";
 export default async function ViewSahyogReceiptsPage({
   searchParams,
 }: {
-  searchParams?: { receiptType?: string | string[] };
+  searchParams?: { receiptType?: string | string[]; page?: string | string[] };
 }) {
   const session = await getSession();
   if (!session?.user) {
@@ -23,6 +24,8 @@ export default async function ViewSahyogReceiptsPage({
   }
 
   const selectedType = String(Array.isArray(searchParams?.receiptType) ? searchParams.receiptType[0] : searchParams?.receiptType ?? "All");
+  const requestedPage = Number.parseInt(String(Array.isArray(searchParams?.page) ? searchParams.page[0] : searchParams?.page ?? "1"), 10);
+  const pageSize = 10;
   const isSuperAdmin = canViewAllSahyogReceipts(session.user.role);
   const { data: sahyogReceipts } = await getReceiptsByUser(session.user.id, {
     role: session.user.role,
@@ -89,6 +92,26 @@ export default async function ViewSahyogReceiptsPage({
       ? allReceipts
       : allReceipts.filter((receipt) => String(receipt.sahyog_type || "General") === effectiveSelectedType);
 
+  const pagination = buildReceiptPagination({
+    totalItems: filteredReceipts.length,
+    currentPage: Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1,
+    pageSize,
+  });
+  const currentPage = pagination.currentPage;
+  const paginatedReceipts = paginateItems(filteredReceipts, currentPage, pageSize).items;
+
+  const buildPageHref = (pageNumber: number) => {
+    const params = new URLSearchParams();
+    if (effectiveSelectedType !== "All") {
+      params.set("receiptType", effectiveSelectedType);
+    }
+    if (pageNumber > 1) {
+      params.set("page", String(pageNumber));
+    }
+    const queryString = params.toString();
+    return `/view-sahyog-receipt${queryString ? `?${queryString}` : ""}`;
+  };
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <InfoPageShell
@@ -107,11 +130,54 @@ export default async function ViewSahyogReceiptsPage({
         </div>
 
         {filteredReceipts.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {filteredReceipts.map((r: any) => (
-              <ReceiptCard key={`${r.source ?? "receipt"}:${r.id}`} receipt={r} downloadUrl={r.downloadUrl} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {paginatedReceipts.map((r: any) => (
+                <ReceiptCard key={`${r.source ?? "receipt"}:${r.id}`} receipt={r} downloadUrl={r.downloadUrl} />
+              ))}
+            </div>
+
+            {pagination.totalPages > 1 && (
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-slate-600">{pagination.pageInfo}</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {pagination.prevPage === null ? (
+                    <span className="rounded border border-slate-200 bg-slate-100 px-3 py-1.5 text-sm text-slate-400">Previous</span>
+                  ) : (
+                    <Link href={buildPageHref(pagination.prevPage)} className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 transition hover:bg-slate-50">
+                      Previous
+                    </Link>
+                  )}
+
+                  {pagination.pageNumbers.map((pageNumber) => {
+                    const isCurrent = pageNumber === currentPage;
+                    return (
+                      <Link
+                        key={pageNumber}
+                        href={buildPageHref(pageNumber)}
+                        className={[
+                          "rounded border px-2.5 py-1.5 text-sm",
+                          isCurrent
+                            ? "border-sky-600 bg-sky-600 text-white"
+                            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+                        ].join(" ")}
+                      >
+                        {pageNumber}
+                      </Link>
+                    );
+                  })}
+
+                  {pagination.nextPage === null ? (
+                    <span className="rounded border border-slate-200 bg-slate-100 px-3 py-1.5 text-sm text-slate-400">Next</span>
+                  ) : (
+                    <Link href={buildPageHref(pagination.nextPage)} className="rounded border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 transition hover:bg-slate-50">
+                      Next
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className="rounded border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-600">
             No receipts found for the selected type.
