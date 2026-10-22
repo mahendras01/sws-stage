@@ -579,10 +579,10 @@ export default function SignupForm() {
   ] as const;
 
   const permanentAddressFields: FieldConfig[] = [
-    { name: "permanent_house_flat_no", label: "घर का पता (आधार कार्ड के अनुसार)", type: "text", placeholder: "स्थायी मकान या फ्लैट नंबर दर्ज करें", fullWidth: true },
-    { name: "permanent_pincode", label: "घर का पिन कोड", type: "text", placeholder: "6 अंकों का कोड", inputMode: "numeric" },
-    { name: "permanent_district", label: "घर का जिला", type: "text", placeholder: "स्थायी जिला दर्ज करें" },
-    { name: "permanent_village_city", label: "घर का ब्लॉक", type: "text", placeholder: "स्थायी गाँव या शहर दर्ज करें" },
+    { name: "permanent_house_flat_no", label: "पता (आधार कार्ड के अनुसार)", type: "text", placeholder: "स्थायी मकान या फ्लैट नंबर दर्ज करें", fullWidth: true },
+    { name: "permanent_pincode", label: "पिन कोड", type: "text", placeholder: "6 अंकों का कोड", inputMode: "numeric" },
+    { name: "permanent_district", label: "जिला", type: "text", placeholder: "स्थायी जिला दर्ज करें" },
+    { name: "permanent_village_city", label: "ब्लॉक", type: "text", placeholder: "ब्लॉक" },
     { name: "permanent_state", label: "राज्य", type: "select", placeholder: "स्थायी राज्य चुनें" },
     { name: "permanent_country", label: "देश", type: "text", placeholder: "भारत", readOnly: true },
   ] as const;
