@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { canUserLogin, getDefaultNewUserStatus } from "../lib/auth-flow.ts";
+import { verifyPincodeMatch } from "../lib/pincode.ts";
 import { normalizePostingDetailsAddress, normalizeSignupAddressPayload } from "../lib/signup-address-mapping.ts";
 
 test("new users are approved immediately while rejected users stay blocked", () => {
@@ -89,4 +90,23 @@ test("nested address objects are flattened to the flat signup schema expected by
   assert.equal(normalized.permanent_house_flat_no, "F23, Kasmandi Kalan");
   assert.equal(normalized.permanent_state, "Uttar Pradesh");
   assert.equal(normalized.permanent_pincode, "226002");
+});
+
+test("verifyPincodeMatch accepts valid postal locality variants while still rejecting mismatched data", async () => {
+  const validVariant = await verifyPincodeMatch({
+    pincode: "226008",
+    district: "Lucknow",
+    villageCity: "Sarojani Nagar",
+    state: "Uttar Pradesh",
+  });
+
+  const invalidVariant = await verifyPincodeMatch({
+    pincode: "226008",
+    district: "Noida",
+    villageCity: "Sarojini Nagar",
+    state: "Uttar Pradesh",
+  });
+
+  assert.equal(validVariant, true);
+  assert.equal(invalidVariant, false);
 });

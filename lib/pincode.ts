@@ -8,6 +8,81 @@ export function normalizePincode(value: string): string {
   return value.replace(/\D/g, "").slice(0, 6);
 }
 
+export function normalizeLocationTextForComparison(value: string): string {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function levenshteinDistance(left: string, right: string): number {
+  if (left === right) {
+    return 0;
+  }
+
+  const rows = left.length + 1;
+  const cols = right.length + 1;
+  const matrix: number[][] = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+  for (let row = 0; row < rows; row += 1) {
+    matrix[row][0] = row;
+  }
+
+  for (let col = 0; col < cols; col += 1) {
+    matrix[0][col] = col;
+  }
+
+  for (let row = 1; row < rows; row += 1) {
+    for (let col = 1; col < cols; col += 1) {
+      const cost = left[row - 1] === right[col - 1] ? 0 : 1;
+      matrix[row][col] = Math.min(
+        matrix[row - 1][col] + 1,
+        matrix[row][col - 1] + 1,
+        matrix[row - 1][col - 1] + cost,
+      );
+    }
+  }
+
+  return matrix[left.length][right.length];
+}
+
+export function areEquivalentLocationNames(left: string, right: string): boolean {
+  const normalizedLeft = normalizeLocationTextForComparison(left);
+  const normalizedRight = normalizeLocationTextForComparison(right);
+
+  if (!normalizedLeft && !normalizedRight) {
+    return true;
+  }
+
+  if (!normalizedLeft || !normalizedRight) {
+    return false;
+  }
+
+  if (normalizedLeft === normalizedRight) {
+    return true;
+  }
+
+  const leftTokens = normalizedLeft.split(" ").filter(Boolean);
+  const rightTokens = normalizedRight.split(" ").filter(Boolean);
+
+  if (leftTokens.length !== rightTokens.length) {
+    return false;
+  }
+
+  return leftTokens.every((token, index) => {
+    const otherToken = rightTokens[index];
+    if (token === otherToken) {
+      return true;
+    }
+
+    const maxDistance = token.length <= 6 ? 1 : 2;
+    return levenshteinDistance(token, otherToken) <= maxDistance;
+  });
+}
+
 export function deriveAddressFromPincodeOptions(
   options: PincodeLocationOption[],
   fallback: { village_city: string; district: string; state: string } = { village_city: "", district: "", state: "" },
@@ -88,9 +163,9 @@ export async function verifyPincodeMatch(input: {
 
   return options.some((option) => {
     return (
-      option.district.toLowerCase() === normalizedDistrict.toLowerCase() &&
-      option.state.toLowerCase() === normalizedState.toLowerCase() &&
-      option.name.toLowerCase() === normalizedVillageCity.toLowerCase()
+      normalizeLocationTextForComparison(option.district) === normalizeLocationTextForComparison(normalizedDistrict) &&
+      normalizeLocationTextForComparison(option.state) === normalizeLocationTextForComparison(normalizedState) &&
+      areEquivalentLocationNames(option.name, normalizedVillageCity)
     );
   });
 }
