@@ -1,4 +1,5 @@
 import { getSession } from "@/lib/auth";
+import { normalizeAnnualMaintenancePaidToName } from "@/lib/annual-maintenance";
 import { queryRows } from "@/lib/postgres";
 import ReceiptCard from "@/components/ReceiptCard";
 import Link from "next/link";
@@ -35,7 +36,7 @@ export default async function ViewAnnualMaintenanceReceiptsPage() {
     created_at: item.created_at,
     paid_by_name: item.user_name ?? session.user.name,
     paid_by_district: item.user_district ?? session.user.district,
-    paid_to_name: "Registration Money",
+    paid_to_name: normalizeAnnualMaintenancePaidToName(item.paid_to_name),
     paid_to_district: item.user_district ?? session.user.district,
     sahyog_type: "Annual Maintenance",
     district: item.user_district ?? session.user.district,

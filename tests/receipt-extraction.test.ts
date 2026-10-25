@@ -321,13 +321,13 @@ test("generateReceiptPdf can generate repeated receipts for the same seed withou
   await fs.promises.unlink(path.join(process.cwd(), secondPath)).catch(() => undefined);
 });
 
-test("normalizeAnnualMaintenancePaidToName remaps legacy annual-maintenance labels to Registration Money", () => {
-  assert.equal(normalizeAnnualMaintenancePaidToName("SWS Bharat Annual Maintenance Fund"), "Registration Money");
-  assert.equal(normalizeAnnualMaintenancePaidToName("Registration Money"), "Registration Money");
-  assert.equal(normalizeAnnualMaintenancePaidToName(null), "Registration Money");
+test("normalizeAnnualMaintenancePaidToName remaps legacy annual-maintenance labels to SELF WELFARE SOCIETY", () => {
+  assert.equal(normalizeAnnualMaintenancePaidToName("SWS Bharat Annual Maintenance Fund"), "SELF WELFARE SOCIETY");
+  assert.equal(normalizeAnnualMaintenancePaidToName("Registration Money"), "SELF WELFARE SOCIETY");
+  assert.equal(normalizeAnnualMaintenancePaidToName(null), "SELF WELFARE SOCIETY");
 });
 
-test("generateAnnualMaintenanceReceipt labels the recipient as Registration Money", async () => {
+test("generateAnnualMaintenanceReceipt labels the recipient as SELF WELFARE SOCIETY", async () => {
   const result = await generateAnnualMaintenanceReceipt({
     id: "am-123",
     user_id: "user-123",
@@ -351,7 +351,7 @@ test("generateAnnualMaintenanceReceipt labels the recipient as Registration Mone
 
   assert.ok(result.generated_receipt_path);
   assert.match(result.generated_receipt_path, /^private\/receipts\/pdf\//);
-  assert.equal(result.paid_to_name, "Registration Money");
+  assert.equal(result.paid_to_name, "SELF WELFARE SOCIETY");
 
   const pdfFile = path.join(process.cwd(), result.generated_receipt_path);
   assert.ok(fs.existsSync(pdfFile), "expected PDF file to be generated");

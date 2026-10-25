@@ -491,8 +491,8 @@ export async function getAnnualMaintenancePaymentByTransaction(userId: string, t
 }
 
 export function normalizeAnnualMaintenancePaidToName(value?: string | null) {
-  if (!value || value === "SWS Bharat Annual Maintenance Fund") {
-    return "Registration Money";
+  if (!value || value === "SWS Bharat Annual Maintenance Fund" || value === "Registration Money") {
+    return "SELF WELFARE SOCIETY";
   }
 
   return value;
@@ -628,7 +628,7 @@ export async function generateAnnualMaintenanceReceipt(payment: {
     transaction_date: payment.payment_date ?? payment.created_at ?? null,
     paid_by_name: user.name ?? "-",
     paid_by_district: user.district ?? "-",
-    paid_to_name: "Registration Money",
+    paid_to_name: "SELF WELFARE SOCIETY",
     paid_to_district: user.district ?? "-",
     sahyog_type: "Annual Maintenance",
     payment_provider: "Annual Maintenance",
@@ -639,13 +639,13 @@ export async function generateAnnualMaintenanceReceipt(payment: {
     address,
     paid_by_name: user.name ?? "-",
     paid_by_district: user.district ?? "-",
-    paid_to_name: normalizeAnnualMaintenancePaidToName("SWS Bharat Annual Maintenance Fund"),
+    paid_to_name: "SELF WELFARE SOCIETY",
     paid_to_district: user.district ?? "-",
   });
 
   return {
     receipt_number: receiptNumber,
     generated_receipt_path: pdfRelativePath,
-    paid_to_name: "Registration Money",
+    paid_to_name: "SELF WELFARE SOCIETY",
   };
 }

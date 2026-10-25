@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import { requireAuth } from "@/lib/auth";
 import { canAccessReceiptForUser } from "@/lib/receipt-access";
-import { getAnnualMaintenancePaymentById, updateAnnualMaintenancePayment } from "@/lib/annual-maintenance";
+import { getAnnualMaintenancePaymentById, normalizeAnnualMaintenancePaidToName, updateAnnualMaintenancePayment } from "@/lib/annual-maintenance";
 import { getCanonicalReceiptPdfRelativePath, isPdfPath, regenerateStoredReceiptPdf } from "@/lib/pdf";
 
 export async function GET(request: Request) {
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
         transaction_date: payment.payment_date ?? payment.created_at,
         sahyog_type: "Annual Maintenance",
         paid_by_name: payment.user_name ?? auth.session.user.name ?? null,
-        paid_to_name: payment.paid_to_name ?? "Registration Money",
+        paid_to_name: normalizeAnnualMaintenancePaidToName(payment.paid_to_name),
       });
 
   const refreshedPdfPath = await regenerateStoredReceiptPdf({
@@ -54,13 +54,13 @@ export async function GET(request: Request) {
     transaction_date: payment.payment_date ?? payment.created_at,
     sahyog_type: "Annual Maintenance",
     paid_by_name: payment.user_name ?? auth.session.user.name ?? null,
-    paid_to_name: payment.paid_to_name ?? "Registration Money",
+    paid_to_name: normalizeAnnualMaintenancePaidToName(payment.paid_to_name),
   }, {
     name: payment.user_name ?? auth.session.user.name ?? null,
     phone_number: payment.user_phone ?? null,
     email: payment.user_email ?? auth.session.user.email ?? null,
     paid_by_name: payment.user_name ?? auth.session.user.name ?? null,
-    paid_to_name: payment.paid_to_name ?? "Registration Money",
+    paid_to_name: normalizeAnnualMaintenancePaidToName(payment.paid_to_name),
   }, currentPdfPath);
 
   const finalPdfPath = refreshedPdfPath ?? currentPdfPath;

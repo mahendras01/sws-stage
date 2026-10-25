@@ -17,6 +17,7 @@ import {
 } from "@/lib/db";
 import { verifyPincodeMatch } from "@/lib/pincode";
 import { getRequestMeta, log, summarizeUser } from "@/lib/logger";
+import { normalizePostingDetailsAddress, normalizeSignupAddressPayload } from "@/lib/signup-address-mapping";
 import type { SignupInput } from "@/lib/types";
 
 function getFriendlySignupError(error: unknown) {
@@ -45,7 +46,8 @@ async function parseSignupBody(request: NextRequest): Promise<SignupInput> {
   const contentType = request.headers.get("content-type") || "";
 
   if (contentType.includes("application/json")) {
-    return request.json() as Promise<SignupInput>;
+    const payload = (await request.json()) as Record<string, unknown>;
+    return normalizeSignupAddressPayload(payload) as unknown as SignupInput;
   }
 
   const formData = await request.formData();
@@ -124,7 +126,7 @@ export async function POST(request: NextRequest) {
   let userSummary: Record<string, unknown> = {};
 
   try {
-    const body = sanitizeSignupInput(await parseSignupBody(request));
+    const body = normalizePostingDetailsAddress(sanitizeSignupInput(await parseSignupBody(request)));
     userSummary = summarizeUser(body);
     log.info("auth.signup.received", { ...meta, user: userSummary });
 

@@ -123,7 +123,8 @@ const requiredFieldNames = new Set([
   "nominee_mobile_number",
   "phone_number",
   "house_flat_no",
-  "street_locality",
+  "district",
+  "village_city",
   "landmark",
   "permanent_house_flat_no",
   "permanent_street_locality",
@@ -574,8 +575,8 @@ export default function SignupForm() {
 
   const currentAddressFields: FieldConfig[] = [
     { name: "house_flat_no", label: "तैनाती गाँव", type: "text", placeholder: "तैनाती गाँव दर्ज करें", fullWidth: true },
-    { name: "street_locality", label: "तैनाती जिला", type: "text", placeholder: "तैनाती जिला दर्ज करें", fullWidth: true },
-    { name: "landmark", label: "तैनाती ब्लॉक", type: "text", placeholder: "तैनाती ब्लॉक दर्ज करें", fullWidth: true },
+    { name: "district", label: "तैनाती जिला", type: "text", placeholder: "तैनाती जिला दर्ज करें", fullWidth: true },
+    { name: "village_city", label: "तैनाती ब्लॉक", type: "text", placeholder: "तैनाती ब्लॉक दर्ज करें", fullWidth: true },
   ] as const;
 
   const permanentAddressFields: FieldConfig[] = [
