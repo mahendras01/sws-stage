@@ -379,4 +379,103 @@ function createPdfAtPath(fullPath: string, receipt: ReceiptData, user: UserData,
   });
 }
 
+export type UserIdCardPdfData = {
+  user: {
+    name?: string | null;
+    email?: string | null;
+    ehrms_code?: string | null;
+    gender?: string | null;
+    date_of_birth?: string | null;
+    phone_number?: string | null;
+    phone_home?: string | null;
+    blood_group?: string | null;
+  };
+  swsId?: string | null;
+};
+
+export function formatUserIdCardValue(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return "—";
+  }
+
+  if (typeof value === "string" && value.trim().length === 0) {
+    return "—";
+  }
+
+  return String(value).trim();
+}
+
+export function formatUserIdCardDate(value: unknown) {
+  const formatted = formatUserIdCardValue(value);
+  if (formatted === "—") {
+    return "—";
+  }
+
+  const asDate = new Date(String(value));
+  if (Number.isNaN(asDate.getTime())) {
+    return formatted;
+  }
+
+  return asDate.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export async function generateUserIdCardPdfBuffer({ user, swsId }: UserIdCardPdfData): Promise<Buffer> {
+  ensurePdfKitFontDataFiles();
+
+  return new Promise((resolve, reject) => {
+    const cardWidth = 300;
+    const cardHeight = 500;
+    const doc = new PDFDocument({ size: [cardWidth, cardHeight], margin: 0, layout: "portrait" });
+    const chunks: Buffer[] = [];
+
+    doc.on("data", (chunk: Buffer | Uint8Array | string) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    const fieldRows = [
+      { key: "ehrms_code", label: "EHRMS Code", value: user.ehrms_code },
+      { key: "swsId", label: "SWSID", value: swsId },
+      { key: "email", label: "Email", value: user.email },
+      { key: "gender", label: "Gender", value: user.gender },
+      { key: "date_of_birth", label: "DOB", value: formatUserIdCardDate(user.date_of_birth) },
+      { key: "phone_number", label: "Mobile", value: user.phone_number },
+      { key: "phone_home", label: "Mobile (Home)", value: user.phone_home },
+      { key: "blood_group", label: "Blood Group", value: user.blood_group },
+    ];
+
+    doc.fillColor("#0f172a").fill("#0f172a");
+    doc.rect(0, 0, cardWidth, cardHeight).fill("#ffffff");
+    doc.fillColor("#ffffff").rect(0, 0, cardWidth, 92).fill("#0f172a");
+    doc.fillColor("#f8fafc").roundedRect(12, 12, cardWidth - 24, cardHeight - 24, 12).fillOpacity(0.98).fillAndStroke("#E2E8F0", "#E2E8F0");
+    doc.fillOpacity(1);
+    doc.fillColor("#f8fafc").rect(0, 0, cardWidth, 92).fill("#0f172a");
+    doc.fillColor("#f8fafc").font("Helvetica-Bold").fontSize(10).text("SELF WELFARE SOCIETY", 0, 18, { align: "center" });
+    doc.fillColor("#f8fafc").font("Helvetica-Bold").fontSize(17).text(user.name || "Member", 0, 38, { align: "center" });
+    doc.fillColor("#f8fafc").font("Helvetica").fontSize(8).text("MEMBER ID CARD", 0, 68, { align: "center" });
+
+    const badgeY = 106;
+    doc.fillColor("#ffffff").roundedRect(170, 100, 110, 26, 12).fill("#f59e0b");
+    doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(9).text(formatUserIdCardValue(swsId), 175, 108, { width: 96, align: "center" });
+
+    const rows = fieldRows.map((item, index) => ({ ...item, y: 145 + index * 40 }));
+    rows.forEach(({ label, value, y }) => {
+      const textValue = label === "DOB" ? formatUserIdCardDate(value) : formatUserIdCardValue(value);
+      doc.fillColor("#64748b").font("Helvetica-Bold").fontSize(7).text(label, 18, y, { width: 90, align: "left" });
+      doc.fillColor("#0f172a").font("Helvetica").fontSize(8).text(textValue, 18, y + 12, { width: 250, align: "left" });
+      doc.strokeColor("#E2E8F0").moveTo(18, y + 26).lineTo(282, y + 26).stroke();
+    });
+
+    doc.fillColor("#0f172a").font("Helvetica-Bold").fontSize(7).text("AM Verified Member", 18, cardHeight - 30, { lineBreak: false });
+    doc.fillColor("#f59e0b").font("Helvetica-Bold").fontSize(7).text("PDF", 250, cardHeight - 30, { lineBreak: false });
+
+    doc.end();
+  });
+}
+
 export default generateReceiptPdf;

@@ -155,6 +155,13 @@ export default function Navbar() {
                   >
                     My Profile
                   </Link>
+                  <Link
+                    href="/user-id-card"
+                    className="mt-1 block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    USER ID CARD
+                  </Link>
                   <button
                     type="button"
                     onClick={() => {
@@ -268,6 +275,12 @@ export default function Navbar() {
                   className="block rounded-lg px-3 py-2 text-left text-sm font-semibold text-white hover:bg-sky-800"
                 >
                   My Profile
+                </Link>
+                <Link
+                  href="/user-id-card"
+                  className="block rounded-lg px-3 py-2 text-left text-sm font-semibold text-white hover:bg-sky-800"
+                >
+                  USER ID CARD
                 </Link>
                 {/* Annual Maintenance is shown only in the main navbar for logged-in users */}
                 <button
