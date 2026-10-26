@@ -249,8 +249,9 @@ export default function SignupForm() {
       );
     } catch (error) {
       setPincodeOptions([]);
-      setPincodeStatus(error instanceof Error ? error.message : "इस पिन कोड के लिए स्थान की जानकारी नहीं मिल सकी। कृपया पुनः प्रयास करें।");
-      setErrors((prev) => ({ ...prev, pincode: error instanceof Error ? error.message : "इस पिन कोड के लिए स्थान की जानकारी नहीं मिल सकी।" }));
+      const message = error instanceof Error ? error.message : "इस पिन कोड के लिए स्थान की जानकारी नहीं मिल सकी। कृपया सही जिला/राज्य/गाँव का चयन करें।";
+      setPincodeStatus(message);
+      setErrors((prev) => ({ ...prev, pincode: message }));
     }
   };
 
@@ -300,12 +301,11 @@ export default function SignupForm() {
       );
     } catch (error) {
       setPermanentPincodeOptions([]);
-      setPermanentPincodeStatus(
-        error instanceof Error ? error.message : "स्थायी पिन कोड के लिए स्थान की जानकारी नहीं मिल सकी। कृपया पुनः प्रयास करें।",
-      );
+      const message = error instanceof Error ? error.message : "स्थायी पिन कोड के लिए स्थान की जानकारी नहीं मिल सकी। कृपया सही जिला/राज्य/गाँव का चयन करें।";
+      setPermanentPincodeStatus(message);
       setErrors((prev) => ({
         ...prev,
-        permanent_pincode: error instanceof Error ? error.message : "स्थायी पिन कोड के लिए स्थान की जानकारी नहीं मिल सकी।",
+        permanent_pincode: message,
       }));
     }
   };

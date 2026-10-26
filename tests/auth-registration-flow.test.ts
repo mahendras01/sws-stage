@@ -110,3 +110,26 @@ test("verifyPincodeMatch accepts valid postal locality variants while still reje
   assert.equal(validVariant, true);
   assert.equal(invalidVariant, false);
 });
+
+test("verifyPincodeMatch skips strict matching when the postal source has no records for a valid 6-digit code", async () => {
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify([{ Message: "No records found", PostOffice: null, Status: "Error" }]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+
+    const result = await verifyPincodeMatch({
+      pincode: "232341",
+      district: "Lucknow",
+      villageCity: "Sadar",
+      state: "Uttar Pradesh",
+    });
+
+    assert.equal(result, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

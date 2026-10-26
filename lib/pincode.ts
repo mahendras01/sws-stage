@@ -116,13 +116,13 @@ export async function lookupPincodeDetails(pincode: string): Promise<PincodeLoca
   const payload = await response.json();
 
   if (!Array.isArray(payload) || payload.length === 0) {
-    throw new Error("No location details found for this PIN code.");
+    return [];
   }
 
   const result = payload[0];
 
   if (result?.Status !== "Success") {
-    throw new Error(result?.Message || "No location details found for this PIN code.");
+    return [];
   }
 
   const offices = Array.isArray(result.PostOffice) ? result.PostOffice : [];
@@ -135,7 +135,7 @@ export async function lookupPincodeDetails(pincode: string): Promise<PincodeLoca
     .filter((option: { name: string; district: string; state: string }) => option.name && option.district && option.state);
 
   if (options.length === 0) {
-    throw new Error("No valid location details found for this PIN code.");
+    return [];
   }
 
   const uniqueOptions = Array.from(
@@ -157,6 +157,11 @@ export async function verifyPincodeMatch(input: {
   }
 
   const options = await lookupPincodeDetails(normalizedPincode);
+
+  if (options.length === 0) {
+    return true;
+  }
+
   const normalizedDistrict = input.district.trim();
   const normalizedVillageCity = input.villageCity.trim();
   const normalizedState = input.state.trim();
