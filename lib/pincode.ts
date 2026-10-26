@@ -49,6 +49,15 @@ function levenshteinDistance(left: string, right: string): number {
   return matrix[left.length][right.length];
 }
 
+function areEquivalentTokens(left: string, right: string): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  const maxDistance = left.length <= 6 ? 1 : 2;
+  return levenshteinDistance(left, right) <= maxDistance;
+}
+
 export function areEquivalentLocationNames(left: string, right: string): boolean {
   const normalizedLeft = normalizeLocationTextForComparison(left);
   const normalizedRight = normalizeLocationTextForComparison(right);
@@ -68,19 +77,41 @@ export function areEquivalentLocationNames(left: string, right: string): boolean
   const leftTokens = normalizedLeft.split(" ").filter(Boolean);
   const rightTokens = normalizedRight.split(" ").filter(Boolean);
 
-  if (leftTokens.length !== rightTokens.length) {
+  if (leftTokens.length === 0 || rightTokens.length === 0) {
     return false;
   }
 
-  return leftTokens.every((token, index) => {
-    const otherToken = rightTokens[index];
-    if (token === otherToken) {
-      return true;
+  const compareBySubsequence = (shorter: string[], longer: string[]) => {
+    let longerIndex = 0;
+    for (const token of shorter) {
+      let matched = false;
+      while (longerIndex < longer.length) {
+        const candidate = longer[longerIndex];
+        if (areEquivalentTokens(token, candidate)) {
+          matched = true;
+          longerIndex += 1;
+          break;
+        }
+        longerIndex += 1;
+      }
+
+      if (!matched) {
+        return false;
+      }
     }
 
-    const maxDistance = token.length <= 6 ? 1 : 2;
-    return levenshteinDistance(token, otherToken) <= maxDistance;
-  });
+    return true;
+  };
+
+  if (leftTokens.length !== rightTokens.length) {
+    if (leftTokens.length < rightTokens.length) {
+      return compareBySubsequence(leftTokens, rightTokens);
+    }
+
+    return compareBySubsequence(rightTokens, leftTokens);
+  }
+
+  return leftTokens.every((token, index) => areEquivalentTokens(token, rightTokens[index]));
 }
 
 export function deriveAddressFromPincodeOptions(

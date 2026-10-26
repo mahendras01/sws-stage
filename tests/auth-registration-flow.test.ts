@@ -133,3 +133,38 @@ test("verifyPincodeMatch skips strict matching when the postal source has no rec
     globalThis.fetch = originalFetch;
   }
 });
+
+test("verifyPincodeMatch accepts equivalent locality names that share the same village root even when one side is a fuller office name", async () => {
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify([
+          {
+            Status: "Success",
+            Message: "Success",
+            PostOffice: [
+              {
+                Name: "Mahanagar Colony",
+                District: "Lucknow",
+                State: "Uttar Pradesh",
+              },
+            ],
+          },
+        ]),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+
+    const result = await verifyPincodeMatch({
+      pincode: "226008",
+      district: "Lucknow",
+      villageCity: "Mahanagar",
+      state: "Uttar Pradesh",
+    });
+
+    assert.equal(result, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
