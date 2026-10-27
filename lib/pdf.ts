@@ -50,6 +50,11 @@ function normalizeCurrencyAmount(rawValue: unknown): string {
   return numeric.toFixed(2);
 }
 
+function formatCurrencyForPdf(rawValue: unknown): string {
+  const amount = normalizeCurrencyAmount(rawValue);
+  return `INR ${amount}`;
+}
+
 export function ensurePdfKitFontDataFiles(): string[] {
   const sourceDataDir = path.join(process.cwd(), "node_modules", "pdfkit", "js", "data");
   if (!fs.existsSync(sourceDataDir)) {
@@ -312,8 +317,8 @@ function createPdfAtPath(fullPath: string, receipt: ReceiptData, user: UserData,
     const donorName = asDisplay(receipt.paid_by_name ?? user.paid_by_name ?? user.name ?? "Donor");
     const donorMobile = asDisplay(user.phone_number ?? "-");
     const donorEmail = asDisplay(user.email ?? "-");
-    const donatedAmount = normalizeCurrencyAmount(receipt.amount ?? 0);
-    const formattedAmount = `₹${donatedAmount}`;
+    const donatedAmount = formatCurrencyForPdf(receipt.amount ?? 0);
+    const formattedAmount = donatedAmount;
     const donationDate = asDisplay(new Date().toISOString().slice(0, 10));
     const transactionId = asDisplay(receipt.transaction_id ?? receipt.transaction_number ?? receipt.transaction_utr ?? receipt.receipt_number ?? "-");
     const causeForDonation = "VYWASTHA SHULK";
