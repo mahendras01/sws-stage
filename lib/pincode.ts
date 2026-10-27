@@ -197,11 +197,26 @@ export async function verifyPincodeMatch(input: {
   const normalizedVillageCity = input.villageCity.trim();
   const normalizedState = input.state.trim();
 
-  return options.some((option) => {
+  const districtStateMatches = options.some((option) => {
     return (
       normalizeLocationTextForComparison(option.district) === normalizeLocationTextForComparison(normalizedDistrict) &&
-      normalizeLocationTextForComparison(option.state) === normalizeLocationTextForComparison(normalizedState) &&
-      areEquivalentLocationNames(option.name, normalizedVillageCity)
+      normalizeLocationTextForComparison(option.state) === normalizeLocationTextForComparison(normalizedState)
     );
   });
+
+  if (!districtStateMatches) {
+    return false;
+  }
+
+  if (!normalizedVillageCity) {
+    return true;
+  }
+
+  return options.some((option) => {
+    const districtMatches = normalizeLocationTextForComparison(option.district) === normalizeLocationTextForComparison(normalizedDistrict);
+    const stateMatches = normalizeLocationTextForComparison(option.state) === normalizeLocationTextForComparison(normalizedState);
+    const villageMatches = areEquivalentLocationNames(option.name, normalizedVillageCity);
+
+    return districtMatches && stateMatches && villageMatches;
+  }) || districtStateMatches;
 }

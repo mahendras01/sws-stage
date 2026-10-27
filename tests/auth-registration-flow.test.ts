@@ -168,3 +168,35 @@ test("verifyPincodeMatch accepts equivalent locality names that share the same v
     globalThis.fetch = originalFetch;
   }
 });
+
+test("verifyPincodeMatch accepts a valid PIN when the district and state match even if the village name differs across local records", async () => {
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify([
+          {
+            Status: "Success",
+            Message: "Success",
+            PostOffice: [
+              { Name: "Suryapura", District: "Ballia", State: "Uttar Pradesh" },
+              { Name: "Basantpur (Ballia)", District: "Ballia", State: "Uttar Pradesh" },
+            ],
+          },
+        ]),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+
+    const result = await verifyPincodeMatch({
+      pincode: "277301",
+      district: "Ballia",
+      villageCity: "Beruarbari",
+      state: "Uttar Pradesh",
+    });
+
+    assert.equal(result, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
