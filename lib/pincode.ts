@@ -197,26 +197,45 @@ export async function verifyPincodeMatch(input: {
   const normalizedVillageCity = input.villageCity.trim();
   const normalizedState = input.state.trim();
 
-  const districtStateMatches = options.some((option) => {
-    return (
-      normalizeLocationTextForComparison(option.district) === normalizeLocationTextForComparison(normalizedDistrict) &&
-      normalizeLocationTextForComparison(option.state) === normalizeLocationTextForComparison(normalizedState)
-    );
-  });
+  const sameStateOptions = options.filter(
+    (option) => normalizeLocationTextForComparison(option.state) === normalizeLocationTextForComparison(normalizedState),
+  );
 
-  if (!districtStateMatches) {
+  if (sameStateOptions.length === 0) {
     return false;
   }
 
+  const districtMatches = sameStateOptions.some(
+    (option) => normalizeLocationTextForComparison(option.district) === normalizeLocationTextForComparison(normalizedDistrict),
+  );
+
   if (!normalizedVillageCity) {
+    return districtMatches;
+  }
+
+  const sameDistrictVillageMatch = sameStateOptions.some(
+    (option) =>
+      normalizeLocationTextForComparison(option.district) === normalizeLocationTextForComparison(normalizedDistrict) &&
+      areEquivalentLocationNames(option.name, normalizedVillageCity),
+  );
+
+  if (sameDistrictVillageMatch) {
     return true;
   }
 
-  return options.some((option) => {
-    const districtMatches = normalizeLocationTextForComparison(option.district) === normalizeLocationTextForComparison(normalizedDistrict);
-    const stateMatches = normalizeLocationTextForComparison(option.state) === normalizeLocationTextForComparison(normalizedState);
-    const villageMatches = areEquivalentLocationNames(option.name, normalizedVillageCity);
+  if (districtMatches) {
+    const conflictingVillageMatch = sameStateOptions.some(
+      (option) =>
+        normalizeLocationTextForComparison(option.district) !== normalizeLocationTextForComparison(normalizedDistrict) &&
+        areEquivalentLocationNames(option.name, normalizedVillageCity),
+    );
 
-    return districtMatches && stateMatches && villageMatches;
-  }) || districtStateMatches;
+    if (conflictingVillageMatch) {
+      return false;
+    }
+
+    return true;
+  }
+
+  return false;
 }

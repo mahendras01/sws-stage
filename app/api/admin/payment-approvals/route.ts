@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminContext, requireAdmin } from "@/lib/auth";
-import { getAnnualMaintenancePaymentById, updateAnnualMaintenancePayment } from "@/lib/annual-maintenance";
+import { getAnnualMaintenancePaymentById, syncUserMembershipExpiryFromAnnualMaintenance, updateAnnualMaintenancePayment } from "@/lib/annual-maintenance";
 import { getReceiptById, updateReceipt } from "@/lib/db";
 import { log } from "@/lib/logger";
 import { getPaymentApprovalStatus } from "@/lib/payment-approvals";
@@ -166,6 +166,18 @@ export async function POST(request: NextRequest) {
 
       if (updateResult.error) {
         return NextResponse.json({ success: false, message: "Failed to update annual maintenance payment.", details: updateResult.error.message }, { status: 500 });
+      }
+
+      try {
+        await syncUserMembershipExpiryFromAnnualMaintenance(payment.user_id);
+      } catch (membershipError) {
+        log.error("admin.payment_approvals.membership_expiry_sync_failed", {
+          error: membershipError,
+          userId: payment.user_id,
+          itemId,
+          decision,
+        });
+        return NextResponse.json({ success: false, message: "Annual maintenance payment was updated, but membership expiry could not be synced." }, { status: 500 });
       }
 
       await queryRows(

@@ -200,3 +200,43 @@ test("verifyPincodeMatch accepts a valid PIN when the district and state match e
     globalThis.fetch = originalFetch;
   }
 });
+
+test("verifyPincodeMatch rejects a same-PIN village that belongs to a different district even when the state and PIN match", async () => {
+  const originalFetch = globalThis.fetch;
+
+  try {
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify([
+          {
+            Status: "Success",
+            Message: "Success",
+            PostOffice: [
+              { Name: "Tlioi", District: "Amethi", State: "Uttar Pradesh" },
+              { Name: "Rahi", District: "Raebareli", State: "Uttar Pradesh" },
+            ],
+          },
+        ]),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+
+    const validVillageMatch = await verifyPincodeMatch({
+      pincode: "229010",
+      district: "Amethi",
+      villageCity: "Tlioi",
+      state: "Uttar Pradesh",
+    });
+
+    const invalidVillageMismatch = await verifyPincodeMatch({
+      pincode: "229010",
+      district: "Amethi",
+      villageCity: "Rahi",
+      state: "Uttar Pradesh",
+    });
+
+    assert.equal(validVillageMatch, true);
+    assert.equal(invalidVillageMismatch, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -1,4 +1,4 @@
-import { queryRows, toDbError } from "./postgres.ts";
+import { pool, queryRows, toDbError, withTransaction, type DbClient } from "./postgres.ts";
 import { generateReceiptPdf } from "./pdf.ts";
 
 export type AnnualMaintenanceRole = "super_admin" | "country_co_admin";
@@ -270,6 +270,98 @@ export async function annualMaintenanceSupportsColumn(columnName: string) {
 
 export const DEFAULT_ANNUAL_MAINTENANCE_VERIFICATION_STATUS = "pending" as const;
 export type AnnualMaintenanceVerificationStatus = "pending" | "verified" | "rejected";
+
+export function calculateAnnualMaintenanceMembershipExpiryDate(paymentDate: string | Date | null | undefined): string | null {
+  if (!paymentDate) {
+    return null;
+  }
+
+  const asDate = paymentDate instanceof Date ? paymentDate : new Date(String(paymentDate));
+  if (Number.isNaN(asDate.getTime())) {
+    return null;
+  }
+
+  const expiry = new Date(asDate);
+  expiry.setUTCFullYear(expiry.getUTCFullYear() + 1);
+  return expiry.toISOString().slice(0, 10);
+}
+
+export function resolveMembershipExpiryDateFromAnnualMaintenanceRecords(
+  records: Array<{ payment_date?: string | null; created_at?: string | null; verification_status?: string | null }>,
+): string | null {
+  const verifiedRecords = records.filter((record) => isAnnualMaintenanceVerificationComplete(record.verification_status));
+  if (verifiedRecords.length === 0) {
+    return null;
+  }
+
+  const latestRecord = verifiedRecords.reduce((latest, candidate) => {
+    const latestDate = latest.payment_date ?? latest.created_at ?? null;
+    const candidateDate = candidate.payment_date ?? candidate.created_at ?? null;
+    if (!latestDate) return candidate;
+    if (!candidateDate) return latest;
+    return new Date(candidateDate).getTime() > new Date(latestDate).getTime() ? candidate : latest;
+  }, verifiedRecords[0]);
+
+  return calculateAnnualMaintenanceMembershipExpiryDate(latestRecord.payment_date ?? latestRecord.created_at ?? null);
+}
+
+export async function syncUserMembershipExpiryFromAnnualMaintenance(userId: string, client: DbClient = pool) {
+  const rows = await queryRows<{ payment_date: string | null; verification_status: string | null; created_at: string | null }>(
+    `SELECT payment_date, verification_status, created_at
+     FROM annual_maintenance_payments
+     WHERE user_id = $1
+       AND payment_category = 'ANNUAL_MAINTENANCE'
+       AND verification_status = 'verified'
+     ORDER BY payment_date DESC NULLS LAST, created_at DESC
+     LIMIT 1`,
+    [userId],
+    client,
+  );
+
+  const nextExpiry = resolveMembershipExpiryDateFromAnnualMaintenanceRecords(rows);
+
+  await queryRows(
+    `UPDATE users
+     SET membership_expiry_date = $1
+     WHERE id = $2`,
+    [nextExpiry, userId],
+    client,
+  );
+
+  return nextExpiry;
+}
+
+export async function applyAnnualMaintenanceMembershipRenewal(userId: string, paymentId: string, paymentDate?: string | null, client?: DbClient) {
+  const activeClient = client ?? pool;
+  if (!activeClient) {
+    throw new Error("Missing DATABASE_URL environment variable for the PostgreSQL database.");
+  }
+
+  return withTransaction(async (tx) => {
+    const rows = await queryRows<{ payment_date: string | null; verification_status: string | null; created_at: string | null }>(
+      `SELECT payment_date, verification_status, created_at
+       FROM annual_maintenance_payments
+       WHERE user_id = $1
+         AND payment_category = 'ANNUAL_MAINTENANCE'
+         AND verification_status = 'verified'
+       ORDER BY payment_date DESC NULLS LAST, created_at DESC`,
+      [userId],
+      tx,
+    );
+
+    const nextExpiry = resolveMembershipExpiryDateFromAnnualMaintenanceRecords(rows);
+
+    await queryRows(
+      `UPDATE users
+       SET membership_expiry_date = $1
+       WHERE id = $2`,
+      [nextExpiry, userId],
+      tx,
+    );
+
+    return { paymentId, userId, membership_expiry_date: nextExpiry };
+  });
+}
 
 export function normalizeTransactionReference(value: string | null | undefined) {
   const normalized = value?.trim();

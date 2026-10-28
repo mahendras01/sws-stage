@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth";
 import { canManageAnnualMaintenance, getAnnualMaintenanceSettings, upsertAnnualMaintenanceSettings, validateAnnualMaintenanceSettings } from "@/lib/annual-maintenance";
+import { detectImageMimeType, MAX_QR_BYTES, resolveImageExtensionForMime } from "@/lib/image-file-validation";
 import fs from "fs";
 import path from "path";
 
 export const dynamic = "force-dynamic";
-
-const ACCEPTED_QR_TYPES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"]);
-const MAX_QR_BYTES = 2 * 1024 * 1024;
 
 function toText(value: FormDataEntryValue | null | undefined) {
   return typeof value === "string" ? value.trim() : "";
@@ -28,21 +26,33 @@ async function saveQrImage(file: File | null, existingQrUrl?: string | null) {
     return normalizeQrPublicUrl(existingQrUrl) ?? null;
   }
 
-  const fileType = file.type?.toLowerCase();
-  if (!ACCEPTED_QR_TYPES.has(fileType)) {
-    throw new Error("QR code must be a PNG, JPG, JPEG, or WebP image.");
+  if (file.size <= 0) {
+    throw new Error("QR code image is empty. Please upload a valid PNG, JPG, JPEG, or WebP file.");
   }
 
   if (file.size > MAX_QR_BYTES) {
     throw new Error("QR code is too large. Maximum size is 2MB.");
   }
 
+  const detectedMime = await detectImageMimeType(file);
+  if (!detectedMime) {
+    throw new Error("QR code image could not be loaded. Please upload a valid PNG, JPG, JPEG, or WebP file.");
+  }
+
   const uploadDir = path.join(process.cwd(), "public", "annual-maintenance");
   await fs.promises.mkdir(uploadDir, { recursive: true });
 
-  const cleanName = `${Date.now()}-${String(file.name || "qr-code").replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+  const sanitizedBase = String(file.name || "qr-code").replace(/\.[^./]+$/, "").replace(/[^a-zA-Z0-9._-]/g, "_");
+  const extension = resolveImageExtensionForMime(detectedMime);
+  const cleanName = `${Date.now()}-${sanitizedBase || "qr-code"}${extension}`;
   const finalPath = path.join(uploadDir, cleanName);
-  await fs.promises.writeFile(finalPath, Buffer.from(await file.arrayBuffer()));
+
+  try {
+    const imageBytes = Buffer.from(await file.arrayBuffer());
+    await fs.promises.writeFile(finalPath, imageBytes);
+  } catch {
+    throw new Error("QR code image could not be saved. Please upload a valid PNG, JPG, JPEG, or WebP file.");
+  }
 
   const normalizedExistingUrl = normalizeQrPublicUrl(existingQrUrl);
   if (normalizedExistingUrl && normalizedExistingUrl.startsWith("/annual-maintenance/")) {

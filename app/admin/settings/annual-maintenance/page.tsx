@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { MAX_QR_BYTES, validateQrImageFile } from "@/lib/image-file-validation";
 
 type Settings = {
   id?: string;
@@ -18,9 +19,6 @@ type Settings = {
   notes?: string | null;
   is_active?: boolean;
 };
-
-const ACCEPTED_QR_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
-const MAX_QR_BYTES = 2 * 1024 * 1024;
 
 function toQrImageSrc(value?: string | null) {
   if (!value) return "";
@@ -100,7 +98,7 @@ export default function AnnualMaintenanceSettingsPage() {
     });
   };
 
-  const handleQrSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleQrSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
     setError("");
     const selected = event.target.files?.[0] ?? null;
     if (!selected) {
@@ -108,15 +106,9 @@ export default function AnnualMaintenanceSettingsPage() {
       return;
     }
 
-    if (!ACCEPTED_QR_TYPES.includes(selected.type)) {
-      setError("QR code must be a PNG, JPG, JPEG, or WebP image.");
-      resetQrSelection();
-      event.target.value = "";
-      return;
-    }
-
-    if (selected.size > MAX_QR_BYTES) {
-      setError("QR code is too large. Maximum size is 2 MB.");
+    const validation = await validateQrImageFile(selected);
+    if (!validation.valid) {
+      setError(validation.error ?? "QR code image could not be loaded. Please upload a valid PNG, JPG, JPEG, or WebP file.");
       resetQrSelection();
       event.target.value = "";
       return;

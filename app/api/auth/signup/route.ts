@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getDefaultNewUserStatus } from "@/lib/auth-flow";
-import { calculateMembershipExpiryDate, sanitizeSignupInput, validateSignup } from "@/lib/validation";
+import { sanitizeSignupInput, validateSignup } from "@/lib/validation";
 import {
   createUser,
   getDepartmentById,
@@ -239,7 +239,7 @@ export async function POST(request: NextRequest) {
       aadhar_number: safeAadharNumber,
       pan_number: safePanNumber,
       date_of_birth: body.date_of_birth || null,
-      membership_expiry_date: calculateMembershipExpiryDate(body.date_of_birth) || null,
+      membership_expiry_date: null,
       ehrms_code: ehrmsCode,
       role_number: body.role_number?.trim() || null,
       gender: body.gender.trim(),
