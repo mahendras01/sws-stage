@@ -15,7 +15,6 @@ import {
   getCountryAdminIds,
   createNotificationsBatch,
 } from "@/lib/db";
-import { verifyPincodeMatch } from "@/lib/pincode";
 import { getRequestMeta, log, summarizeUser } from "@/lib/logger";
 import { normalizePostingDetailsAddress, normalizeSignupAddressPayload } from "@/lib/signup-address-mapping";
 import type { SignupInput } from "@/lib/types";
@@ -165,29 +164,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (hasCurrentAddressDetails) {
-      if (!villageCity || !district || !state || !pincode) {
-        log.warn("auth.signup.rejected", { ...meta, reason: "incomplete_current_address", user: userSummary });
-        return NextResponse.json(
-          { success: false, message: "गाँव/शहर, जिला, राज्य और पिन कोड का पूरा विवरण आवश्यक है।", errors: { pincode: "गाँव/शहर, जिला, राज्य और पिन कोड का पूरा विवरण आवश्यक है।" } },
-          { status: 400 },
-        );
-      }
-
-      const pincodeIsValid = await verifyPincodeMatch({
-        pincode,
-        district,
-        villageCity,
-        state,
-      });
-
-      if (!pincodeIsValid) {
-        log.warn("auth.signup.rejected", { ...meta, reason: "pincode_mismatch", user: userSummary });
-        return NextResponse.json(
-          { success: false, message: "पिन कोड, प्रदान किए गए जिले, गाँव/शहर या राज्य से मेल नहीं खाता।", errors: { pincode: "पिन कोड, दिए गए पता विवरण से मेल नहीं खाता।" } },
-          { status: 400 },
-        );
-      }
+    if (hasCurrentAddressDetails && (!villageCity || !district || !state || !pincode)) {
+      log.warn("auth.signup.rejected", { ...meta, reason: "incomplete_current_address", user: userSummary });
+      return NextResponse.json(
+        { success: false, message: "गाँव/शहर, जिला, राज्य और पिन कोड का पूरा विवरण आवश्यक है।", errors: { pincode: "गाँव/शहर, जिला, राज्य और पिन कोड का पूरा विवरण आवश्यक है।" } },
+        { status: 400 },
+      );
     }
 
     const { data: existingEmail } = await getUserByEmail(email);

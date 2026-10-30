@@ -92,7 +92,7 @@ test("nested address objects are flattened to the flat signup schema expected by
   assert.equal(normalized.permanent_pincode, "226002");
 });
 
-test("verifyPincodeMatch accepts valid postal locality variants while still rejecting mismatched data", async () => {
+test("verifyPincodeMatch treats PIN values as manually entered data and does not reject valid 6-digit codes based on district or village mismatch", async () => {
   const validVariant = await verifyPincodeMatch({
     pincode: "226008",
     district: "Lucknow",
@@ -100,143 +100,40 @@ test("verifyPincodeMatch accepts valid postal locality variants while still reje
     state: "Uttar Pradesh",
   });
 
-  const invalidVariant = await verifyPincodeMatch({
+  const mismatchedVariant = await verifyPincodeMatch({
     pincode: "226008",
     district: "Noida",
     villageCity: "Sarojini Nagar",
     state: "Uttar Pradesh",
   });
 
+  const differentStateVariant = await verifyPincodeMatch({
+    pincode: "110001",
+    district: "Central Delhi",
+    villageCity: "Connaught Place",
+    state: "Delhi",
+  });
+
   assert.equal(validVariant, true);
-  assert.equal(invalidVariant, false);
+  assert.equal(mismatchedVariant, true);
+  assert.equal(differentStateVariant, true);
 });
 
-test("verifyPincodeMatch skips strict matching when the postal source has no records for a valid 6-digit code", async () => {
-  const originalFetch = globalThis.fetch;
+test("verifyPincodeMatch still rejects malformed PINs but does not do location cross-checks", async () => {
+  const invalidPin = await verifyPincodeMatch({
+    pincode: "12345",
+    district: "Lucknow",
+    villageCity: "Sadar",
+    state: "Uttar Pradesh",
+  });
 
-  try {
-    globalThis.fetch = async () =>
-      new Response(JSON.stringify([{ Message: "No records found", PostOffice: null, Status: "Error" }]), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+  const validPin = await verifyPincodeMatch({
+    pincode: "232341",
+    district: "Lucknow",
+    villageCity: "Sadar",
+    state: "Uttar Pradesh",
+  });
 
-    const result = await verifyPincodeMatch({
-      pincode: "232341",
-      district: "Lucknow",
-      villageCity: "Sadar",
-      state: "Uttar Pradesh",
-    });
-
-    assert.equal(result, true);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("verifyPincodeMatch accepts equivalent locality names that share the same village root even when one side is a fuller office name", async () => {
-  const originalFetch = globalThis.fetch;
-
-  try {
-    globalThis.fetch = async () =>
-      new Response(
-        JSON.stringify([
-          {
-            Status: "Success",
-            Message: "Success",
-            PostOffice: [
-              {
-                Name: "Mahanagar Colony",
-                District: "Lucknow",
-                State: "Uttar Pradesh",
-              },
-            ],
-          },
-        ]),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
-
-    const result = await verifyPincodeMatch({
-      pincode: "226008",
-      district: "Lucknow",
-      villageCity: "Mahanagar",
-      state: "Uttar Pradesh",
-    });
-
-    assert.equal(result, true);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("verifyPincodeMatch accepts a valid PIN when the district and state match even if the village name differs across local records", async () => {
-  const originalFetch = globalThis.fetch;
-
-  try {
-    globalThis.fetch = async () =>
-      new Response(
-        JSON.stringify([
-          {
-            Status: "Success",
-            Message: "Success",
-            PostOffice: [
-              { Name: "Suryapura", District: "Ballia", State: "Uttar Pradesh" },
-              { Name: "Basantpur (Ballia)", District: "Ballia", State: "Uttar Pradesh" },
-            ],
-          },
-        ]),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
-
-    const result = await verifyPincodeMatch({
-      pincode: "277301",
-      district: "Ballia",
-      villageCity: "Beruarbari",
-      state: "Uttar Pradesh",
-    });
-
-    assert.equal(result, true);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("verifyPincodeMatch rejects a same-PIN village that belongs to a different district even when the state and PIN match", async () => {
-  const originalFetch = globalThis.fetch;
-
-  try {
-    globalThis.fetch = async () =>
-      new Response(
-        JSON.stringify([
-          {
-            Status: "Success",
-            Message: "Success",
-            PostOffice: [
-              { Name: "Tlioi", District: "Amethi", State: "Uttar Pradesh" },
-              { Name: "Rahi", District: "Raebareli", State: "Uttar Pradesh" },
-            ],
-          },
-        ]),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
-
-    const validVillageMatch = await verifyPincodeMatch({
-      pincode: "229010",
-      district: "Amethi",
-      villageCity: "Tlioi",
-      state: "Uttar Pradesh",
-    });
-
-    const invalidVillageMismatch = await verifyPincodeMatch({
-      pincode: "229010",
-      district: "Amethi",
-      villageCity: "Rahi",
-      state: "Uttar Pradesh",
-    });
-
-    assert.equal(validVillageMatch, true);
-    assert.equal(invalidVillageMismatch, false);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  assert.equal(invalidPin, false);
+  assert.equal(validPin, true);
 });

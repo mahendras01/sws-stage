@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/Toast";
-import { deriveAddressFromPincodeOptions, lookupPincodeDetails, normalizePincode } from "@/lib/pincode";
+import { normalizePincode } from "@/lib/pincode";
 import { sanitizeEnglishTextInput, sanitizeEnglishTextInputForTyping } from "@/lib/validation";
 
 type DepartmentOption = { id: string; name: string };
@@ -187,10 +187,6 @@ export default function SignupForm() {
   const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [posts, setPosts] = useState<PostOption[]>([]);
   const [masterDataReady, setMasterDataReady] = useState(false);
-  const [pincodeOptions, setPincodeOptions] = useState<Array<{ name: string; district: string; state: string }>>([]);
-  const [pincodeStatus, setPincodeStatus] = useState<string>("");
-  const [permanentPincodeOptions, setPermanentPincodeOptions] = useState<Array<{ name: string; district: string; state: string }>>([]);
-  const [permanentPincodeStatus, setPermanentPincodeStatus] = useState<string>("");
 
   useEffect(() => {
     const loadMasterData = async () => {
@@ -215,100 +211,6 @@ export default function SignupForm() {
   }, []);
 
   const departmentPosts = posts.filter((post) => post.department_id === form.department_id);
-  const permanentVillageCityOptions = permanentPincodeOptions.filter(
-    (option) => !form.permanent_district || option.district.toLowerCase() === form.permanent_district.trim().toLowerCase(),
-  );
-
-  const handlePincodeLookup = async (pincode: string) => {
-    const normalized = normalizePincode(pincode);
-
-    if (normalized.length !== 6) {
-      setPincodeOptions([]);
-      setPincodeStatus("");
-      return;
-    }
-
-    try {
-      setPincodeStatus("पिन कोड की जाँच की जा रही है...");
-      const options = await lookupPincodeDetails(normalized);
-      setPincodeOptions(options);
-
-      const firstOption = options[0];
-      setForm((prev) => ({
-        ...prev,
-        district: firstOption.district || prev.district,
-        state: firstOption.state || prev.state,
-        village_city: options.length === 1 ? firstOption.name : prev.village_city,
-      }));
-
-      setErrors((prev) => ({ ...prev, pincode: "", district: "", state: "", village_city: "" }));
-      setPincodeStatus(
-        options.length > 1
-          ? "इस पिन कोड के लिए कई स्थान मिले हैं। कृपया सही गाँव/शहर चुनें।"
-          : "पिन कोड सही मिल गया है।",
-      );
-    } catch (error) {
-      setPincodeOptions([]);
-      const message = error instanceof Error ? error.message : "इस पिन कोड के लिए स्थान की जानकारी नहीं मिल सकी। कृपया सही जिला/राज्य/गाँव का चयन करें।";
-      setPincodeStatus(message);
-      setErrors((prev) => ({ ...prev, pincode: message }));
-    }
-  };
-
-  const handlePermanentPincodeLookup = async (pincode: string) => {
-    const normalized = normalizePincode(pincode);
-
-    if (normalized.length !== 6) {
-      setPermanentPincodeOptions([]);
-      setPermanentPincodeStatus("");
-      return;
-    }
-
-    try {
-      setPermanentPincodeStatus("स्थायी पिन कोड की जाँच की जा रही है...");
-      const options = await lookupPincodeDetails(normalized);
-      setPermanentPincodeOptions(options);
-
-      const matchingOptions = options.filter(
-        (option) => !form.permanent_district || option.district.toLowerCase() === form.permanent_district.trim().toLowerCase(),
-      );
-      const nextOptions = matchingOptions.length > 0 ? matchingOptions : options;
-      const autoFilledAddress = deriveAddressFromPincodeOptions(nextOptions, {
-        village_city: form.permanent_village_city,
-        district: form.permanent_district,
-        state: form.permanent_state,
-      });
-
-      setForm((prev) => ({
-        ...prev,
-        permanent_district: autoFilledAddress.district || prev.permanent_district,
-        permanent_state: autoFilledAddress.state || prev.permanent_state,
-        permanent_village_city: nextOptions.length === 1 ? autoFilledAddress.village_city : prev.permanent_village_city || "",
-      }));
-
-      setErrors((prev) => ({
-        ...prev,
-        permanent_pincode: "",
-        permanent_village_city: "",
-        permanent_district: "",
-        permanent_state: "",
-      }));
-
-      setPermanentPincodeStatus(
-        nextOptions.length > 1
-          ? "इस पिन कोड के लिए कई स्थान मिले हैं। कृपया सही गाँव/शहर चुनें।"
-          : "स्थायी पिन कोड सही मिल गया है।",
-      );
-    } catch (error) {
-      setPermanentPincodeOptions([]);
-      const message = error instanceof Error ? error.message : "स्थायी पिन कोड के लिए स्थान की जानकारी नहीं मिल सकी। कृपया सही जिला/राज्य/गाँव का चयन करें।";
-      setPermanentPincodeStatus(message);
-      setErrors((prev) => ({
-        ...prev,
-        permanent_pincode: message,
-      }));
-    }
-  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const target = e.target as HTMLInputElement | HTMLSelectElement;
@@ -358,41 +260,9 @@ export default function SignupForm() {
         return { ...prev, department_id: value, post_id: "" };
       }
 
-      if (fieldName === "permanent_district") {
-        const districtMatches = permanentPincodeOptions.filter(
-          (option) => option.district.toLowerCase() === value.trim().toLowerCase(),
-        );
-        const normalizedVillage = districtMatches.length === 1 ? districtMatches[0].name : prev.permanent_village_city;
-
-        return {
-          ...prev,
-          permanent_district: value,
-          permanent_village_city: districtMatches.length === 0 ? prev.permanent_village_city : normalizedVillage,
-        };
-      }
-
       return { ...prev, [fieldName]: nextValue };
     });
     setErrors((prev) => ({ ...prev, [fieldName]: "" }));
-
-    if ((fieldName === "pincode" || fieldName === "permanent_pincode") && typeof nextValue === "string") {
-      if (fieldName === "pincode") {
-        if (nextValue.length === 6) {
-          void handlePincodeLookup(nextValue);
-        } else {
-          setPincodeOptions([]);
-          setPincodeStatus("");
-        }
-        return;
-      }
-
-      if (nextValue.length === 6) {
-        void handlePermanentPincodeLookup(nextValue);
-      } else {
-        setPermanentPincodeOptions([]);
-        setPermanentPincodeStatus("");
-      }
-    }
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
@@ -584,16 +454,15 @@ export default function SignupForm() {
     { name: "permanent_pincode", label: "पिन कोड", type: "text", placeholder: "6 अंकों का कोड", inputMode: "numeric" },
     { name: "permanent_district", label: "जिला", type: "text", placeholder: "स्थायी जिला दर्ज करें" },
     { name: "permanent_village_city", label: "ब्लॉक", type: "text", placeholder: "ब्लॉक" },
-    { name: "permanent_state", label: "राज्य", type: "select", placeholder: "स्थायी राज्य चुनें" },
+    { name: "permanent_state", label: "राज्य*", type: "text", placeholder: "राज्य लिखें" },
     { name: "permanent_country", label: "देश", type: "text", placeholder: "भारत", readOnly: true },
   ] as const;
 
   const renderField = (field: FieldConfig) => {
     const isError = Boolean(errors[field.name]);
     const isRequired = requiredFieldNames.has(field.name);
-    const isVillageSelect = field.name === "village_city" && pincodeOptions.length > 1;
 
-    if (field.type === "select" || isVillageSelect) {
+    if (field.type === "select") {
       let selectOptions: Array<{ value: string; label: string }> = [];
 
       if (field.name === "gender") {
@@ -602,8 +471,6 @@ export default function SignupForm() {
         selectOptions = departments.map((option) => ({ value: option.id, label: option.name }));
       } else if (field.name === "post_id") {
         selectOptions = departmentPosts.map((option) => ({ value: option.id, label: option.name }));
-      } else if (isVillageSelect) {
-        selectOptions = pincodeOptions.map((option) => ({ value: option.name, label: option.name }));
       } else {
         selectOptions = stateOptions.map((option) => ({ value: option, label: option }));
       }
@@ -625,7 +492,7 @@ export default function SignupForm() {
             className={`input-field ${isError ? "border-danger" : ""} ${field.name === "post_id" && (!form.department_id || departmentPosts.length === 0) ? "cursor-not-allowed opacity-60" : ""}`}
           >
             <option value="">
-              {field.name === "gender" ? "Select gender" : field.name === "department_id" ? "Select Department" : field.name === "post_id" ? "Select Post" : isVillageSelect ? "Select village/city" : "Select state"}
+              {field.name === "gender" ? "Select gender" : field.name === "department_id" ? "Select Department" : field.name === "post_id" ? "Select Post" : "Select state"}
             </option>
             {selectOptions.map((option) => (
               <option key={option.value} value={option.value}>
@@ -696,11 +563,6 @@ export default function SignupForm() {
         {(field.name === "password" || field.name === "confirm_password") && !isError && (
           <p className="mt-1 text-[11px] text-slate-500">{field.name === "password" ? "कम से कम 8 अक्षर." : "पासवर्ड फिर से दर्ज करें."}</p>
         )}
-        {(field.name === "pincode" || field.name === "permanent_pincode") && ((field.name === "pincode" ? pincodeStatus : permanentPincodeStatus) && (
-          <p className={`mt-1 text-xs ${errors[field.name] ? "text-danger" : "text-slate-500"}`}>
-            {field.name === "pincode" ? pincodeStatus : permanentPincodeStatus}
-          </p>
-        ))}
         {isError && <p className="mt-1 text-xs text-danger">{errors[field.name]}</p>}
       </div>
     );
