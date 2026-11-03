@@ -351,7 +351,7 @@ export default function ProfileForm() {
   return (
     <div className="mx-auto max-w-4xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900">My Profile</h1>
+        <h1 className="text-3xl font-bold text-slate-900">MY PROFILE</h1>
         <p className="mt-2 text-sm text-slate-600">View and update your personal details.</p>
       </div>
 

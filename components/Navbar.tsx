@@ -153,7 +153,7 @@ export default function Navbar() {
                     className="block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
                     onClick={() => setUserMenuOpen(false)}
                   >
-                    My Profile
+                    MY PROFILE
                   </Link>
                   <Link
                     href="/user-id-card"
@@ -161,6 +161,13 @@ export default function Navbar() {
                     onClick={() => setUserMenuOpen(false)}
                   >
                     USER ID CARD
+                  </Link>
+                  <Link
+                    href="/update-password"
+                    className="mt-1 block rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+                    onClick={() => setUserMenuOpen(false)}
+                  >
+                    UPDATE PASSWORD
                   </Link>
                   <button
                     type="button"
@@ -170,7 +177,7 @@ export default function Navbar() {
                     }}
                     className="mt-1 block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100"
                   >
-                    Logout
+                    LOGOUT
                   </button>
                 </div>
               )}
@@ -274,7 +281,7 @@ export default function Navbar() {
                   href="/profile"
                   className="block rounded-lg px-3 py-2 text-left text-sm font-semibold text-white hover:bg-sky-800"
                 >
-                  My Profile
+                  MY PROFILE
                 </Link>
                 <Link
                   href="/user-id-card"
@@ -282,13 +289,19 @@ export default function Navbar() {
                 >
                   USER ID CARD
                 </Link>
+                <Link
+                  href="/update-password"
+                  className="block rounded-lg px-3 py-2 text-left text-sm font-semibold text-white hover:bg-sky-800"
+                >
+                  UPDATE PASSWORD
+                </Link>
                 {/* Annual Maintenance is shown only in the main navbar for logged-in users */}
                 <button
                   type="button"
                   onClick={() => void handleLogout()}
                   className="mt-1 block w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-white hover:bg-sky-800"
                 >
-                  Logout
+                  LOGOUT
                 </button>
               </div>
             )}

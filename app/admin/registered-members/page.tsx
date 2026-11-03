@@ -20,6 +20,7 @@ type MemberRow = {
   district?: string | null;
   state?: string | null;
   pincode?: string | null;
+  created_at?: string | null;
 };
 
 export default function RegisteredMembersPage() {
@@ -115,6 +116,17 @@ export default function RegisteredMembersPage() {
     return parts.length > 0 ? parts.join(", ") : "-";
   };
 
+  const formatRegistrationDate = (value?: string | null) => {
+    if (!value) return "N/A";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "N/A";
+
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
+
   if (loading) return <LoadingSpinner />;
 
   return (
@@ -196,6 +208,9 @@ export default function RegisteredMembersPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                   Address
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
+                  Registration Date
+                </th>
                 {isSuperAdmin && (
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
                     Password
@@ -206,7 +221,7 @@ export default function RegisteredMembersPage() {
             <tbody className="divide-y divide-gray-200 bg-white">
               {members.length === 0 ? (
                 <tr>
-                  <td colSpan={isSuperAdmin ? 8 : 7} className="px-4 py-6 text-center text-sm text-neutral">
+                  <td colSpan={isSuperAdmin ? 9 : 8} className="px-4 py-6 text-center text-sm text-neutral">
                     No registered members found.
                   </td>
                 </tr>
@@ -220,6 +235,7 @@ export default function RegisteredMembersPage() {
                     <td className="px-4 py-3 text-sm text-neutral">{member.email || "-"}</td>
                     <td className="px-4 py-3 text-sm text-neutral">{member.phone_number || "-"}</td>
                     <td className="px-4 py-3 text-sm text-neutral">{formatAddress(member)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-neutral">{formatRegistrationDate(member.created_at)}</td>
                     {isSuperAdmin && (
                       <td className="whitespace-nowrap px-4 py-3 text-sm">
                         {member.id === session?.user?.id ? (

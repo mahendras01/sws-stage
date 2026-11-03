@@ -506,7 +506,7 @@ export async function getApprovedUsers(adminRole?: string | null, adminDistrict?
     }
 
     const data = await queryRows(
-      `SELECT id, serial_number, ehrms_code, name, role_number, email, phone_number, house_flat_no, street_locality, village_city, district, state, pincode, date_of_birth
+      `SELECT id, serial_number, ehrms_code, name, role_number, email, phone_number, house_flat_no, street_locality, village_city, district, state, pincode, date_of_birth, created_at
        FROM users
        WHERE ${whereClauses.join(" AND ")}
        ORDER BY serial_number ASC`,
