@@ -4,17 +4,6 @@ export default function FloatingActions() {
   return (
     <div className="fixed bottom-4 right-4 z-40 flex flex-col gap-3 sm:bottom-6 sm:right-6">
       <a
-        href="tel:+919999999999"
-        aria-label="Call us"
-        className="flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:bg-primary/90"
-      >
-        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h2.5a1 1 0 01.98.8l.6 3.6a1 1 0 01-.2.88L7.2 10.2a15 15 0 006.6 6.6l1.92-1.68a1 1 0 01.88-.2l3.6.6A1 1 0 0121 18.5V21a2 2 0 01-2 2h-1C9.6 23 1 14.4 1 3V2a2 2 0 012-2h2.5z" />
-        </svg>
-        <span className="hidden sm:inline">Call</span>
-      </a>
-
-      <a
         href="https://wa.me/919999999999"
         target="_blank"
         rel="noreferrer"
