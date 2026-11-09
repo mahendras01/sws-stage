@@ -1,5 +1,6 @@
 import Link from "next/link";
 import React from "react";
+import { formatPaymentStatusLabel } from "@/lib/payment-approvals";
 
 type Receipt = {
   id: string;
@@ -68,7 +69,7 @@ export default function ReceiptCard({ receipt, downloadUrl }: { receipt: Receipt
           {receipt.status && (
             <div>
               <div className="text-xs text-slate-500">Status</div>
-              <div className="font-medium">{receipt.status}</div>
+              <div className="font-medium">{formatPaymentStatusLabel(receipt.status)}</div>
             </div>
           )}
         </div>

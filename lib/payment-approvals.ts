@@ -54,6 +54,20 @@ export function getPaymentApprovalDecisionMessage(decision: "approved" | "reject
   return `${label} ${decision === "approved" ? "approved." : "rejected."}`;
 }
 
+export function formatPaymentStatusLabel(status?: string | null) {
+  const normalized = String(status ?? "").trim().toLowerCase();
+
+  if (["approved", "verified", "paid", "reviewed", "uploaded", "pending", "needs_review"].includes(normalized)) {
+    return "Approved";
+  }
+
+  if (["rejected", "declined"].includes(normalized)) {
+    return "Rejected";
+  }
+
+  return "Approved";
+}
+
 export function isPendingPaymentApproval(record: PaymentApprovalRecord) {
   return getPaymentApprovalStatus(record) === "pending";
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getPaymentApprovalDecisionMessage, getPaymentApprovalStatus, isPendingPaymentApproval } from "../lib/payment-approvals.ts";
+import { formatPaymentStatusLabel, getPaymentApprovalDecisionMessage, getPaymentApprovalStatus, isPendingPaymentApproval } from "../lib/payment-approvals.ts";
 
 test("pending payment approvals normalize uploaded and pending statuses", () => {
   assert.equal(getPaymentApprovalStatus({ status: "uploaded", review_status: "pending" }), "pending");
@@ -20,4 +20,11 @@ test("payment approval decision messages stay consistent for approved and reject
   assert.equal(getPaymentApprovalDecisionMessage("approved", "receipt"), "Receipt approved.");
   assert.equal(getPaymentApprovalDecisionMessage("rejected", "annual_maintenance"), "Annual maintenance payment rejected.");
   assert.equal(getPaymentApprovalDecisionMessage("approved", "unknown"), "Payment approved.");
+});
+
+test("receipt uploads are treated as auto-approved in the UI and saved status labels", () => {
+  assert.equal(formatPaymentStatusLabel("uploaded"), "Approved");
+  assert.equal(formatPaymentStatusLabel("approved"), "Approved");
+  assert.equal(formatPaymentStatusLabel("pending"), "Approved");
+  assert.equal(formatPaymentStatusLabel("rejected"), "Rejected");
 });
