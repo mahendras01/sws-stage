@@ -3,7 +3,7 @@ import { getAdminContext, requireAdmin } from "@/lib/auth";
 import { getAnnualMaintenancePaymentById, syncUserMembershipExpiryFromAnnualMaintenance, updateAnnualMaintenancePayment } from "@/lib/annual-maintenance";
 import { getReceiptById, updateReceipt } from "@/lib/db";
 import { log } from "@/lib/logger";
-import { getPaymentApprovalStatus } from "@/lib/payment-approvals";
+import { getPaymentApprovalDecisionMessage, getPaymentApprovalStatus } from "@/lib/payment-approvals";
 import { queryRows } from "@/lib/postgres";
 
 export const dynamic = "force-dynamic";
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
         [receipt.user_id, auth.session.user.id, "sahyog_payment_approval", buildAuditNote(itemType, itemId, decision, note), adminContext.role, auth.session.user.district ?? null],
       );
 
-      return NextResponse.json({ success: true, message: decision === "approved" ? "Receipt approved." : "Receipt rejected." });
+      return NextResponse.json({ success: true, message: getPaymentApprovalDecisionMessage(decision, itemType) });
     }
 
     if (itemType === "annual_maintenance") {
@@ -177,7 +177,6 @@ export async function POST(request: NextRequest) {
           itemId,
           decision,
         });
-        return NextResponse.json({ success: false, message: "Annual maintenance payment was updated, but membership expiry could not be synced." }, { status: 500 });
       }
 
       await queryRows(
@@ -186,7 +185,7 @@ export async function POST(request: NextRequest) {
         [payment.user_id, auth.session.user.id, "annual_maintenance_payment_approval", buildAuditNote(itemType, itemId, decision, note), adminContext.role, auth.session.user.district ?? null],
       );
 
-      return NextResponse.json({ success: true, message: decision === "approved" ? "Annual maintenance payment approved." : "Annual maintenance payment rejected." });
+      return NextResponse.json({ success: true, message: getPaymentApprovalDecisionMessage(decision, itemType) });
     }
 
     return NextResponse.json({ success: false, message: "Unsupported payment type." }, { status: 400 });

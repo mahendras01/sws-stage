@@ -110,12 +110,15 @@ export default function PaymentApprovalsPage() {
       }
 
       showToast(data.message || "Payment update processed", "success");
-      setItems((current) => current.filter((entry) => entry.itemId !== item.itemId || entry.source !== item.source));
+      setItems((current) => {
+        const updated = current.filter((entry) => entry.itemId !== item.itemId || entry.source !== item.source);
+        if (updated.length === 0) {
+          fetchItems();
+        }
+        return updated;
+      });
       setSelectedItem((current) => (current && current.itemId === item.itemId && current.source === item.source ? null : current));
       setActionLoading(null);
-      if (items.length <= 1) {
-        fetchItems();
-      }
     } catch {
       showToast("Unable to update the payment approval", "error");
       setActionLoading(null);

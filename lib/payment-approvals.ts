@@ -44,6 +44,16 @@ export function getPaymentApprovalStatus(record: PaymentApprovalRecord): Payment
   return "pending";
 }
 
+export function getPaymentApprovalDecisionMessage(decision: "approved" | "rejected", itemType?: string | null) {
+  const label = itemType === "annual_maintenance"
+    ? "Annual maintenance payment"
+    : itemType === "receipt"
+      ? "Receipt"
+      : "Payment";
+
+  return `${label} ${decision === "approved" ? "approved." : "rejected."}`;
+}
+
 export function isPendingPaymentApproval(record: PaymentApprovalRecord) {
   return getPaymentApprovalStatus(record) === "pending";
 }
