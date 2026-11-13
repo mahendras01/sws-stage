@@ -1,11 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
 const districtScopedRoles = ["district_admin", "district_co_admin"] as const;
+const countryLevelRole = "country_co_admin" as const;
+
+type LookupUser = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone_number: string | null;
+  role: string | null;
+  district: string | null;
+  is_admin: boolean;
+  status: string | null;
+};
 
 function validateAdminForm(form: {
   name: string;
@@ -14,18 +26,24 @@ function validateAdminForm(form: {
   role: string;
   district: string;
   pincode: string;
+  selectedUserId?: string;
 }) {
   const errors: Record<string, string> = {};
+  const isCountryRole = form.role === countryLevelRole;
 
-  if (!form.name.trim() || form.name.trim().length < 3) {
+  if (isCountryRole && !form.selectedUserId) {
+    errors.selectedUser = "Select an existing registered user first";
+  }
+
+  if (!isCountryRole && (!form.name.trim() || form.name.trim().length < 3)) {
     errors.name = "Full name must be at least 3 characters";
   }
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+  if (!isCountryRole && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
     errors.email = "Valid email is required";
   }
 
-  if (!form.password || form.password.length < 8) {
+  if (!isCountryRole && (!form.password || form.password.length < 8)) {
     errors.password = "Password must be at least 8 characters";
   }
 
@@ -48,6 +66,12 @@ export default function CreateAdminPage() {
   const [pincodeStatus, setPincodeStatus] = useState("");
   const [pincodeError, setPincodeError] = useState("");
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [lookupQuery, setLookupQuery] = useState("");
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupResults, setLookupResults] = useState<LookupUser[]>([]);
+  const [selectedUser, setSelectedUser] = useState<LookupUser | null>(null);
+  const [lookupMessage, setLookupMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [submitMessage, setSubmitMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [form, setForm] = useState({
     id: "",
     name: "",
@@ -66,6 +90,19 @@ export default function CreateAdminPage() {
     () => districtScopedRoles.includes(form.role as (typeof districtScopedRoles)[number]),
     [form.role],
   );
+  const isCountryRole = form.role === countryLevelRole;
+
+  const resetForm = () => {
+    setForm({ id: "", name: "", email: "", password: "", role: "country_co_admin", district: "", district_id: "", pincode: "", country: "India", is_active: true });
+    setSelectedUser(null);
+    setLookupQuery("");
+    setLookupResults([]);
+    setLookupMessage(null);
+    setSubmitMessage(null);
+    setPincodeStatus("");
+    setPincodeError("");
+    setFormErrors({});
+  };
 
   useEffect(() => {
     if (status !== "loading" && !isSuperAdmin) {
@@ -123,6 +160,73 @@ export default function CreateAdminPage() {
     }
   }
 
+  const handleUserLookup = useCallback(async (lookupValue?: string) => {
+    const query = (lookupValue ?? lookupQuery).trim();
+    if (!query) {
+      setLookupResults([]);
+      setLookupMessage(null);
+      return;
+    }
+
+    setSubmitMessage(null);
+    setLookupLoading(true);
+    try {
+      const res = await fetch(`/api/admin/admins?lookup=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const users = Array.isArray(data.users) ? data.users : [];
+        setLookupResults(users);
+        setLookupMessage(
+          users.length > 0
+            ? { type: "success", text: `Found ${users.length} matching user${users.length > 1 ? "s" : ""}. Select one to review details.` }
+            : { type: "error", text: "No matching user found. Please check the email or mobile number." },
+        );
+      } else {
+        setLookupResults([]);
+        setLookupMessage({ type: "error", text: data?.message || "User lookup failed." });
+      }
+    } catch (error) {
+      console.error(error);
+      setLookupResults([]);
+      setLookupMessage({ type: "error", text: "Unable to search users right now. Please try again." });
+    } finally {
+      setLookupLoading(false);
+    }
+  }, [lookupQuery]);
+
+  useEffect(() => {
+    if (!isCountryRole) return;
+
+    const query = lookupQuery.trim();
+    if (!query) {
+      setLookupResults([]);
+      setLookupMessage(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void handleUserLookup(query);
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [lookupQuery, isCountryRole, handleUserLookup]);
+
+  function handleSelectUser(user: LookupUser) {
+    setSelectedUser(user);
+    setForm((current) => ({
+      ...current,
+      id: user.id,
+      name: user.name ?? "",
+      email: user.email ?? "",
+      password: "",
+    }));
+    setLookupResults([]);
+    setLookupQuery(user.email || user.phone_number || "");
+    setLookupMessage({ type: "success", text: "User selected. Review details before assigning Country Co-Admin role." });
+    setSubmitMessage(null);
+    setFormErrors((prev) => ({ ...prev, selectedUser: "" }));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
@@ -140,24 +244,42 @@ export default function CreateAdminPage() {
       };
     }
 
-    const validationErrors = validateAdminForm(resolvedForm);
+    const validationErrors = validateAdminForm({
+      ...resolvedForm,
+      selectedUserId: selectedUser?.id,
+    });
     setFormErrors(validationErrors);
 
     if (Object.keys(validationErrors).length > 0) {
       return;
     }
 
+    if (isCountryRole && selectedUser) {
+      const confirmed = window.confirm(`Assign Country Co-Admin role to ${selectedUser.name || selectedUser.email || "this user"}?`);
+      if (!confirmed) {
+        return;
+      }
+    }
+
     const validDistrictId = resolvedForm.district_id && /^[0-9a-fA-F-]{36}$/.test(resolvedForm.district_id) ? resolvedForm.district_id : "";
 
-    const payload = {
-      ...resolvedForm,
-      password: resolvedForm.password || undefined,
-      district: isDistrictRole ? resolvedForm.district : "",
-      district_id: isDistrictRole ? validDistrictId : "",
-      pincode: isDistrictRole ? resolvedForm.pincode : "",
-      country: resolvedForm.country?.trim() || "India",
-      status: "approved",
-    };
+    const payload = isCountryRole
+      ? {
+          role: resolvedForm.role,
+          selected_user_id: selectedUser?.id,
+          country: resolvedForm.country?.trim() || "India",
+          is_active: resolvedForm.is_active,
+          status: "approved",
+        }
+      : {
+          ...resolvedForm,
+          password: resolvedForm.password || undefined,
+          district: isDistrictRole ? resolvedForm.district : "",
+          district_id: isDistrictRole ? validDistrictId : "",
+          pincode: isDistrictRole ? resolvedForm.pincode : "",
+          country: resolvedForm.country?.trim() || "India",
+          status: "approved",
+        };
 
     try {
       const res = await fetch("/api/admin/admins", {
@@ -167,17 +289,29 @@ export default function CreateAdminPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setForm({ id: "", name: "", email: "", password: "", role: "country_co_admin", district: "", district_id: "", pincode: "", country: "India", is_active: true });
-        setPincodeStatus("");
-        setPincodeError("");
-        setFormErrors({});
-        alert("Admin created successfully");
+        setSubmitMessage({ type: "success", text: isCountryRole ? "Country Co-Admin assigned successfully." : "Admin created successfully." });
+        setForm((current) => ({
+          ...current,
+          id: "",
+          name: "",
+          email: "",
+          password: "",
+          district: "",
+          district_id: "",
+          pincode: "",
+        }));
+        if (isCountryRole) {
+          setSelectedUser(null);
+          setLookupResults([]);
+          setLookupQuery("");
+          setLookupMessage(null);
+        }
       } else {
-        alert(data.message || "Failed to save admin");
+        setSubmitMessage({ type: "error", text: data.message || "Failed to save admin" });
       }
-    } catch (e) {
-      console.error(e);
-      alert("Error creating admin");
+    } catch (err) {
+      console.error(err);
+      setSubmitMessage({ type: "error", text: "Error creating admin" });
     }
   }
 
@@ -188,54 +322,64 @@ export default function CreateAdminPage() {
     <div className="p-4">
       <div className="mb-6">
         <h1 className="text-xl font-bold text-gray-900">Create Admin</h1>
-        <p className="mt-1 text-sm text-gray-500">Add a country or district-level admin using the standard registration form layout.</p>
+        <p className="mt-1 text-sm text-gray-500">Assign country or district-level admin roles.</p>
       </div>
+
+      {submitMessage && (
+        <div className={`mb-4 rounded border px-3 py-2 text-sm ${submitMessage.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}`}>
+          {submitMessage.text}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="mb-6 rounded border border-gray-200 bg-white p-4 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Full Name</label>
-            <input
-              placeholder="Enter full name"
-              value={form.name}
-              onChange={(e) => {
-                setForm({ ...form, name: e.target.value });
-                setFormErrors((prev) => ({ ...prev, name: "" }));
-              }}
-              className="input"
-            />
-            {formErrors.name && <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>}
-          </div>
+          {!isCountryRole && (
+            <>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Full Name</label>
+                <input
+                  placeholder="Enter full name"
+                  value={form.name}
+                  onChange={(e) => {
+                    setForm({ ...form, name: e.target.value });
+                    setFormErrors((prev) => ({ ...prev, name: "" }));
+                  }}
+                  className="input"
+                />
+                {formErrors.name && <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>}
+              </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
-            <input
-              type="email"
-              placeholder="you@example.com"
-              value={form.email}
-              onChange={(e) => {
-                setForm({ ...form, email: e.target.value });
-                setFormErrors((prev) => ({ ...prev, email: "" }));
-              }}
-              className="input"
-            />
-            {formErrors.email && <p className="mt-1 text-xs text-red-600">{formErrors.email}</p>}
-          </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Email</label>
+                <input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={form.email}
+                  onChange={(e) => {
+                    setForm({ ...form, email: e.target.value });
+                    setFormErrors((prev) => ({ ...prev, email: "" }));
+                  }}
+                  className="input"
+                />
+                {formErrors.email && <p className="mt-1 text-xs text-red-600">{formErrors.email}</p>}
+              </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Password</label>
-            <input
-              type="password"
-              placeholder="Use 8+ chars with uppercase, lowercase, number & symbol"
-              value={form.password}
-              onChange={(e) => {
-                setForm({ ...form, password: e.target.value });
-                setFormErrors((prev) => ({ ...prev, password: "" }));
-              }}
-              className="input"
-            />
-            {formErrors.password && <p className="mt-1 text-xs text-red-600">{formErrors.password}</p>}
-          </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Password</label>
+                <input
+                  type="password"
+                  placeholder="Use 8+ chars with uppercase, lowercase, number & symbol"
+                  value={form.password}
+                  onChange={(e) => {
+                    setForm({ ...form, password: e.target.value });
+                    setFormErrors((prev) => ({ ...prev, password: "" }));
+                  }}
+                  className="input"
+                />
+                {formErrors.password && <p className="mt-1 text-xs text-red-600">{formErrors.password}</p>}
+              </div>
+            </>
+          )}
 
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Admin Type</label>
@@ -243,14 +387,23 @@ export default function CreateAdminPage() {
               value={form.role}
               onChange={(e) => {
                 const nextRole = e.target.value;
-                setForm({
-                  ...form,
+                setForm((current) => ({
+                  ...current,
                   role: nextRole,
-                  district: districtScopedRoles.includes(nextRole as (typeof districtScopedRoles)[number]) ? form.district : "",
-                  district_id: districtScopedRoles.includes(nextRole as (typeof districtScopedRoles)[number]) ? form.district_id : "",
-                  pincode: districtScopedRoles.includes(nextRole as (typeof districtScopedRoles)[number]) ? form.pincode : "",
-                });
-                setFormErrors((prev) => ({ ...prev, district: "", pincode: "" }));
+                  id: districtScopedRoles.includes(nextRole as (typeof districtScopedRoles)[number]) ? current.id : "",
+                  name: districtScopedRoles.includes(nextRole as (typeof districtScopedRoles)[number]) ? current.name : "",
+                  email: districtScopedRoles.includes(nextRole as (typeof districtScopedRoles)[number]) ? current.email : "",
+                  password: districtScopedRoles.includes(nextRole as (typeof districtScopedRoles)[number]) ? current.password : "",
+                  district: districtScopedRoles.includes(nextRole as (typeof districtScopedRoles)[number]) ? current.district : "",
+                  district_id: districtScopedRoles.includes(nextRole as (typeof districtScopedRoles)[number]) ? current.district_id : "",
+                  pincode: districtScopedRoles.includes(nextRole as (typeof districtScopedRoles)[number]) ? current.pincode : "",
+                }));
+                if (nextRole === countryLevelRole) {
+                  setSelectedUser(null);
+                  setLookupQuery("");
+                  setLookupResults([]);
+                }
+                setFormErrors((prev) => ({ ...prev, district: "", pincode: "", selectedUser: "" }));
                 setPincodeStatus("");
                 setPincodeError("");
               }}
@@ -270,6 +423,80 @@ export default function CreateAdminPage() {
               className="input"
             />
           </div>
+
+          {isCountryRole && (
+            <div className="md:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-gray-700">Find Existing User (Email or Mobile Number)</label>
+              <div className="flex gap-2">
+                <input
+                  placeholder="Search by email or 10-digit mobile"
+                  value={lookupQuery}
+                  onChange={(e) => {
+                    setLookupQuery(e.target.value);
+                    setSelectedUser(null);
+                    setSubmitMessage(null);
+                  }}
+                  className="input"
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => void handleUserLookup()}
+                  disabled={lookupLoading}
+                >
+                  {lookupLoading ? "Searching..." : "Search"}
+                </button>
+              </div>
+              {formErrors.selectedUser && <p className="mt-1 text-xs text-red-600">{formErrors.selectedUser}</p>}
+
+              {lookupMessage && (
+                <p className={`mt-2 text-xs ${lookupMessage.type === "success" ? "text-emerald-700" : "text-red-600"}`}>
+                  {lookupMessage.text}
+                </p>
+              )}
+
+              {lookupResults.length > 0 && (
+                <div className="mt-2 max-h-60 overflow-auto rounded border border-gray-200">
+                  {lookupResults.map((user) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      className="flex w-full items-center justify-between border-b border-gray-100 px-3 py-2 text-left last:border-b-0 hover:bg-gray-50"
+                      onClick={() => handleSelectUser(user)}
+                    >
+                      <span className="text-sm text-gray-800">{user.name || "Unnamed User"}</span>
+                      <span className="text-xs text-gray-500">{user.email || "-"} | {user.phone_number || "-"}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {selectedUser && (
+                <div className="mt-3 grid gap-3 rounded border border-slate-200 bg-slate-50 p-3 md:grid-cols-5">
+                  <div>
+                    <p className="text-xs text-slate-500">Name</p>
+                    <p className="text-sm font-medium text-slate-800">{selectedUser.name || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Email</p>
+                    <p className="text-sm font-medium text-slate-800">{selectedUser.email || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Mobile Number</p>
+                    <p className="text-sm font-medium text-slate-800">{selectedUser.phone_number || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Current Role</p>
+                    <p className="text-sm font-medium text-slate-800">{selectedUser.role || "user"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">District</p>
+                    <p className="text-sm font-medium text-slate-800">{selectedUser.district || "-"}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {isDistrictRole && (
             <div>
@@ -319,17 +546,16 @@ export default function CreateAdminPage() {
         )}
 
         <div className="mt-6 flex gap-3">
-          <button type="submit" className="btn btn-primary">
-            Create Admin
-          </button>
+          {(!isCountryRole || selectedUser) && (
+            <button type="submit" className="btn btn-primary">
+              {isCountryRole ? "Assign Country Co-Admin" : "Create Admin"}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-secondary"
             onClick={() => {
-              setForm({ id: "", name: "", email: "", password: "", role: "country_co_admin", district: "", district_id: "", pincode: "", country: "India", is_active: true });
-              setPincodeStatus("");
-              setPincodeError("");
-              setFormErrors({});
+              resetForm();
             }}
           >
             Clear

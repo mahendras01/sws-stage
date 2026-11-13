@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminContext, requireAdmin } from "@/lib/auth";
+import { canManagePendingUsers } from "@/lib/admin-rbac";
 import { createApprovalHistory, getUserById, updateUserStatus, resolveNotificationsForRegistration } from "@/lib/db";
 import { getRequestMeta, log, summarizeUser } from "@/lib/logger";
 
@@ -24,8 +25,8 @@ export async function POST(request: NextRequest) {
     const adminRole = adminContext.role;
     adminActor = { adminId: auth.session.user.id, adminEmail: auth.session.user.email, adminRole };
 
-    if (adminRole !== "super_admin") {
-      log.warn("admin.approve_user.rejected", { ...meta, ...adminActor, targetUserId: userId, reason: "not_super_admin" });
+    if (!canManagePendingUsers(adminRole)) {
+      log.warn("admin.approve_user.rejected", { ...meta, ...adminActor, targetUserId: userId, reason: "insufficient_role" });
       return NextResponse.json(
         { success: false, message: "Only the Super Admin can approve or reject new users" },
         { status: 403 },

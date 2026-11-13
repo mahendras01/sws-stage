@@ -1,6 +1,10 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "./auth-options";
 import { NextResponse } from "next/server";
+import {
+  isCountryLevelAdminRole as isCountryLevelAdminRoleImpl,
+  isDistrictScopedAdminRole as isDistrictScopedAdminRoleImpl,
+} from "./admin-rbac";
 
 export {
   canAccessReceiptForUser,
@@ -39,16 +43,16 @@ export async function requireAdmin() {
 }
 
 export function isDistrictScopedAdminRole(role?: string | null) {
-  return role === "district_admin" || role === "district_co_admin";
+  return isDistrictScopedAdminRoleImpl(role);
 }
 
 export function isCountryLevelAdminRole(role?: string | null) {
-  return role === "super_admin" || role === "country_co_admin";
+  return isCountryLevelAdminRoleImpl(role);
 }
 
 export function getAdminContext(session: { user: { role?: string; is_admin?: boolean; district?: string | null } }) {
   // Preserve explicit role values from session.user.role when present.
-  // Allowed roles: 'user', 'district_admin', 'super_admin', 'country_co_admin', 'district_co_admin'
+  // Allowed roles: 'user', 'district_admin', 'super_admin', 'country_co_admin', 'district_co_admin', 'admin_read_only'
   const role = session.user.role ?? (session.user.is_admin ? "super_admin" : "user");
 
   return {

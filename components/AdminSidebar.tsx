@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { canViewPendingUsers } from "@/lib/admin-rbac";
 
 export default function AdminSidebar() {
   const pathname = usePathname();
@@ -11,6 +12,7 @@ export default function AdminSidebar() {
   const [pendingCount, setPendingCount] = useState(0);
 
   const isSuperAdmin = session?.user?.role === "super_admin";
+  const canViewPendingApprovals = canViewPendingUsers(session?.user?.role ?? null);
   const isDistrictScopedAdmin = session?.user?.role === "district_admin" || session?.user?.role === "district_co_admin";
   const isCountryLevelAdmin = session?.user?.role === "super_admin" || session?.user?.role === "country_co_admin";
   const isGalleryManager = ["super_admin", "country_co_admin", "district_admin", "district_co_admin"].includes(session?.user?.role ?? "");
@@ -23,7 +25,7 @@ export default function AdminSidebar() {
       ]
     : [
         { href: "/admin", label: "Dashboard", exact: true },
-        ...(isSuperAdmin ? [{ href: "/admin/approve-members", label: "Pending Approvals" }] : []),
+        ...(canViewPendingApprovals ? [{ href: "/admin/approve-members", label: "Pending Approvals" }] : []),
         ...(isCountryLevelAdmin ? [{ href: "/admin/nominee-edit-requests", label: "Nominee Change Requests" }] : []),
         { href: "/admin/registered-members", label: "Registered Members" },
         { href: "/admin/add-death", label: "Add Labharthi Records" },
@@ -38,13 +40,18 @@ export default function AdminSidebar() {
       ];
 
   useEffect(() => {
+    if (!canViewPendingApprovals) {
+      setPendingCount(0);
+      return;
+    }
+
     fetch("/api/admin/pending-users")
       .then((res) => res.json())
       .then((data) => {
         if (data.users) setPendingCount(data.users.length);
       })
       .catch(() => {});
-  }, [pathname]);
+  }, [pathname, canViewPendingApprovals]);
 
   return (
     <aside className="w-full shrink-0 lg:w-64">

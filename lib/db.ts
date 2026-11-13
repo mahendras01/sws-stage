@@ -360,7 +360,7 @@ export async function listAdmins() {
     const data = await queryRows(
       `SELECT id, name, email, role, district, district_id, is_admin, is_active, created_at, updated_at, ehrms_code
        FROM users
-       WHERE is_admin = TRUE AND role = ANY($1::text[])
+       WHERE is_admin = TRUE AND role::text = ANY($1::text[])
        ORDER BY created_at DESC`,
       [["super_admin", "country_co_admin", "district_admin", "district_co_admin"]],
     );

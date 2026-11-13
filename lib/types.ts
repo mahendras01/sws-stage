@@ -1,6 +1,6 @@
 export type UserStatus = "pending" | "approved" | "rejected";
 export type DeathStatus = "active" | "closed";
-export type UserRole = "user" | "country_co_admin" | "district_admin" | "district_co_admin" | "super_admin";
+export type UserRole = "user" | "country_co_admin" | "district_admin" | "district_co_admin" | "super_admin" | "admin_read_only";
 
 export interface User {
   id: string;

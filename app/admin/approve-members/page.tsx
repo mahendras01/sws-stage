@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import RejectModal from "@/components/RejectModal";
 import { useToast } from "@/components/Toast";
+import { canManagePendingUsers, canViewPendingUsers } from "@/lib/admin-rbac";
 import { formatDate } from "@/lib/validation";
 
 interface PendingUser {
@@ -59,7 +60,6 @@ export default function ApproveMembersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Only the Super Admin can open this page, so full details are shown for verification before approval.
   const showValue = (value?: string | null) => {
     if (!value) return "—";
     return value.toString().trim() || "—";
@@ -138,19 +138,27 @@ export default function ApproveMembersPage() {
 
   if (loading) return <LoadingSpinner />;
 
-  if (adminRole !== "super_admin") {
+  if (!canViewPendingUsers(adminRole)) {
     return (
       <div className="card mt-8 p-8 text-center">
         <h1 className="text-2xl font-bold text-gray-900">Pending Approvals</h1>
-        <p className="mt-3 text-neutral">Only the Super Admin can approve or reject new registrations.</p>
+        <p className="mt-3 text-neutral">You do not have access to this section.</p>
       </div>
     );
   }
 
+  const canModerate = canManagePendingUsers(adminRole);
+
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900">Pending Approvals</h1>
-      <p className="mt-1 text-neutral">Review and approve new member registrations</p>
+      <p className="mt-1 text-neutral">Review pending member registrations</p>
+
+      {!canModerate && (
+        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Read-only access: you can view pending registrations, but only the Super Admin can approve or reject them.
+        </p>
+      )}
 
       {users.length === 0 ? (
         <div className="card mt-8 py-12 text-center">
@@ -235,29 +243,31 @@ export default function ApproveMembersPage() {
                   </div>
                 </div>
 
-                <div className="flex shrink-0 gap-3">
-                  <button
-                    onClick={() => handleApprove(user.id)}
-                    disabled={actionLoading === user.id}
-                    className="btn-primary"
-                  >
-                    {actionLoading === user.id ? "..." : "Approve"}
-                  </button>
-                  <button
-                    onClick={() => setRejectUser(user)}
-                    disabled={actionLoading === user.id}
-                    className="btn-danger"
-                  >
-                    Reject
-                  </button>
-                </div>
+                {canModerate && (
+                  <div className="flex shrink-0 gap-3">
+                    <button
+                      onClick={() => handleApprove(user.id)}
+                      disabled={actionLoading === user.id}
+                      className="btn-primary"
+                    >
+                      {actionLoading === user.id ? "..." : "Approve"}
+                    </button>
+                    <button
+                      onClick={() => setRejectUser(user)}
+                      disabled={actionLoading === user.id}
+                      className="btn-danger"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {rejectUser && (
+      {canModerate && rejectUser && (
         <RejectModal
           userName={rejectUser.name}
           onConfirm={handleReject}

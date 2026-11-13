@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminContext, requireAdmin } from "@/lib/auth";
+import { canViewPendingUsers } from "@/lib/admin-rbac";
 import { getPendingUsersForAdmin } from "@/lib/db";
 import { getRequestMeta, log } from "@/lib/logger";
 
@@ -14,10 +15,10 @@ export async function GET(request: Request) {
 
     const adminContext = getAdminContext(auth.session);
 
-    if (adminContext.role !== "super_admin") {
-      log.warn("admin.pending_users.rejected", { ...meta, adminId: auth.session.user.id, adminEmail: auth.session.user.email, adminRole: adminContext.role, reason: "not_super_admin" });
+    if (!canViewPendingUsers(adminContext.role)) {
+      log.warn("admin.pending_users.rejected", { ...meta, adminId: auth.session.user.id, adminEmail: auth.session.user.email, adminRole: adminContext.role, reason: "insufficient_role" });
       return NextResponse.json(
-        { success: false, message: "Only the Super Admin can view pending approvals" },
+        { success: false, message: "Forbidden" },
         { status: 403 },
       );
     }
