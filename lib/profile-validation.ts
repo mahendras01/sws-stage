@@ -14,6 +14,7 @@ const OPTIONAL_EMPTY_ALLOWED_FIELDS = new Set([
 ]);
 
 const FIELD_VALIDATORS: Record<string, (value: string) => boolean> = {
+  email: (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
   gender: (value) => ["Male", "Female", "Other"].includes(value),
   father_husband_name: (value) => value.trim().length >= 2,
   department_id: (value) => value.trim().length > 0,

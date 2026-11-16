@@ -121,6 +121,18 @@ test("validateProfileUpdatePayload requires nominee and posting details for regi
   assert.equal(errors.village_city, "Invalid village city.");
 });
 
+test("validateProfileUpdatePayload requires a valid email and 10-digit mobile number", () => {
+  const invalidPayload = {
+    email: "not-an-email",
+    phone_number: "12345",
+  };
+
+  const errors = validateProfileUpdatePayload(invalidPayload);
+
+  assert.equal(errors.email, "Invalid email.");
+  assert.equal(errors.phone_number, "Invalid phone number.");
+});
+
 test("validateSignup accepts hidden current address fields left blank for a registration flow without visible address inputs", () => {
   const payload = {
     name: "Rahul Sharma",

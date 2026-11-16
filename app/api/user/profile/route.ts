@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getSession } from "@/lib/auth";
-import { getDepartments, getPosts, getUserById, getUserPendingNomineeRequest, getUserProfileById, updateUserProfile } from "@/lib/db";
+import { getDepartments, getPosts, getUserByEmail, getUserById, getUserByPhoneNumber, getUserPendingNomineeRequest, getUserProfileById, updateUserProfile } from "@/lib/db";
 import { getRequestMeta, log, summarizeUser } from "@/lib/logger";
 import { validateProfileUpdatePayload } from "@/lib/profile-validation";
 
-const READ_ONLY_FIELDS = ["name", "email", "aadhar_number", "pan_number", "date_of_birth", "ehrms_code", "role_number"];
+const READ_ONLY_FIELDS = ["name", "aadhar_number", "pan_number", "date_of_birth", "ehrms_code", "role_number"];
 const EDITABLE_FIELDS = [
+  "email",
   "gender",
   "father_husband_name",
   "department_id",
@@ -60,6 +61,16 @@ function getSafeProfilePayload(body: Record<string, unknown>) {
       }
 
       const value = typeof rawValue === "string" ? rawValue.trim() : String(rawValue).trim();
+      if (field === "email") {
+        safeUpdate[field] = value.toLowerCase();
+        continue;
+      }
+
+      if (field === "phone_number") {
+        safeUpdate[field] = value.replace(/\s+/g, "");
+        continue;
+      }
+
       if (field === "bank_ifsc_code") {
         safeUpdate[field] = value.toUpperCase();
         continue;
@@ -212,6 +223,25 @@ export async function PATCH(request: NextRequest) {
   if (Object.keys(validationErrors).length > 0) {
     log.warn("profile.update.validation_failed", { ...updateSummary, errors: validationErrors });
     return NextResponse.json({ success: false, message: "Validation failed", errors: validationErrors }, { status: 400 });
+  }
+
+  const email = typeof updates.email === "string" ? updates.email.toLowerCase().trim() : "";
+  const phoneNumber = typeof updates.phone_number === "string" ? updates.phone_number.replace(/\s+/g, "") : "";
+
+  if (email) {
+    const { data: existingEmail } = await getUserByEmail(email);
+    if (existingEmail && existingEmail.id !== session.user.id) {
+      log.warn("profile.update.rejected", { ...meta, user: actor, reason: "duplicate_email", existingUserId: existingEmail.id });
+      return NextResponse.json({ success: false, message: "This email address is already registered to another user." }, { status: 409 });
+    }
+  }
+
+  if (phoneNumber) {
+    const { data: existingPhone } = await getUserByPhoneNumber(phoneNumber);
+    if (existingPhone && existingPhone.id !== session.user.id) {
+      log.warn("profile.update.rejected", { ...meta, user: actor, reason: "duplicate_phone_number", existingUserId: existingPhone.id });
+      return NextResponse.json({ success: false, message: "This mobile number is already registered to another user." }, { status: 409 });
+    }
   }
 
   if (updates.department_id && updates.post_id) {

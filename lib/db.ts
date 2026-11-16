@@ -55,6 +55,24 @@ export async function getUserByEmail(email: string) {
   }
 }
 
+export async function getUserByPhoneNumber(phoneNumber: string) {
+  const normalized = String(phoneNumber ?? "").replace(/\s+/g, "").replace(/\D/g, "");
+
+  if (!normalized) {
+    return { data: null, error: null };
+  }
+
+  try {
+    const rows = await queryRows<User>("SELECT * FROM users WHERE REPLACE(phone_number, ' ', '') = $1 LIMIT 1", [normalized]);
+    if (rows.length === 0) {
+      return { data: null, error: missingSingleRowError("User") };
+    }
+    return { data: rows[0], error: null };
+  } catch (error) {
+    return { data: null, error: toDbError(error) };
+  }
+}
+
 export async function listDistricts() {
   try {
     const data = await queryRows<{ id: string; district_name: string; state_name: string | null }>(

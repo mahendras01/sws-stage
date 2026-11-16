@@ -214,6 +214,7 @@ export default function ProfileForm() {
 
     try {
       const payload = {
+        email: form.email,
         gender: form.gender,
         father_husband_name: form.father_husband_name,
         department_id: form.department_id,
@@ -313,12 +314,12 @@ export default function ProfileForm() {
                   <input readOnly value={form.role_number || "Not Provided"} className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm text-slate-700" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
-                  <input readOnly value={form.email || "Not Provided"} className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm text-slate-700" />
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Email <span className="text-red-500">*</span></label>
+                  <input type="email" value={form.email} onChange={(e) => handleChange("email", e.target.value)} className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-900" required />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Mobile</label>
-                  <input readOnly value={form.phone_number || "Not Provided"} className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm text-slate-700" />
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Mobile <span className="text-red-500">*</span></label>
+                  <input type="tel" value={form.phone_number} onChange={(e) => handleChange("phone_number", e.target.value)} className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-900" required />
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Mobile (Home)</label>
