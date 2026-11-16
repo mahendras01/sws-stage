@@ -99,6 +99,28 @@ test("validateProfileUpdatePayload rejects genuinely invalid values while keepin
   assert.equal(errors.pincode, "Invalid pincode.");
 });
 
+test("validateProfileUpdatePayload requires nominee and posting details for registered profile edits", () => {
+  const invalidPayload = {
+    nominee_name: "",
+    nominee_relationship: "",
+    nominee_mobile_number: "12345",
+    nominee_aadhar_number: "123",
+    house_flat_no: "",
+    district: "",
+    village_city: "",
+  };
+
+  const errors = validateProfileUpdatePayload(invalidPayload);
+
+  assert.equal(errors.nominee_name, "Invalid nominee name.");
+  assert.equal(errors.nominee_relationship, "Invalid nominee relationship.");
+  assert.equal(errors.nominee_mobile_number, "Invalid nominee mobile number.");
+  assert.equal(errors.nominee_aadhar_number, "Invalid nominee aadhar number.");
+  assert.equal(errors.house_flat_no, "Invalid house flat no.");
+  assert.equal(errors.district, "Invalid district.");
+  assert.equal(errors.village_city, "Invalid village city.");
+});
+
 test("validateSignup accepts hidden current address fields left blank for a registration flow without visible address inputs", () => {
   const payload = {
     name: "Rahul Sharma",

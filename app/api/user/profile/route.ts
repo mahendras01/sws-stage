@@ -205,13 +205,7 @@ export async function PATCH(request: NextRequest) {
 
   const nomineeFieldsUpdated = NOMINEE_EDIT_FIELDS.some((field) => Object.prototype.hasOwnProperty.call(updates, field));
   if (nomineeFieldsUpdated) {
-    const currentProfile = await getUserById(session.user.id);
-    if (!currentProfile.data || currentProfile.data.nominee_edit_allowed !== true) {
-      log.warn("profile.update.nominee_locked", { ...updateSummary, reason: "nominee_edit_not_approved" });
-      return NextResponse.json({ success: false, message: "Nominee details are locked. Submit a request and wait for admin approval." }, { status: 403 });
-    }
-
-    updates.nominee_edit_allowed = false;
+    log.info("profile.update.nominee.direct_edit", { ...updateSummary, userId: session.user.id, fields: Object.keys(updates).filter((field) => NOMINEE_EDIT_FIELDS.includes(field as (typeof NOMINEE_EDIT_FIELDS)[number])) });
   }
 
   const validationErrors = validateUpdates(updates);
