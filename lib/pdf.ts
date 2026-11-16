@@ -11,6 +11,7 @@ type ReceiptData = {
   payment_provider?: string | null;
   amount?: number | string;
   created_at?: string;
+  updated_at?: string;
   id?: string;
   user_id?: string;
   transaction_date?: string | null;
@@ -195,6 +196,24 @@ function asDisplay(value: unknown) {
   return text || "-";
 }
 
+export function formatReceiptDateForPdf(receipt: Partial<ReceiptData> | null | undefined): string {
+  const rawValue = receipt?.transaction_date ?? receipt?.created_at ?? receipt?.updated_at ?? null;
+  if (!rawValue) {
+    return "-";
+  }
+
+  const date = new Date(String(rawValue));
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const year = date.getUTCFullYear();
+
+  return `${day}-${month}-${year}`;
+}
+
 export function getCanonicalReceiptPdfRelativePath(receipt: Partial<ReceiptData>): string {
   const seed = String(receipt.receipt_number ?? receipt.transaction_number ?? receipt.transaction_id ?? receipt.id ?? crypto.randomUUID());
   const safeBaseName = `SWS-REC-${seed.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
@@ -319,7 +338,7 @@ function createPdfAtPath(fullPath: string, receipt: ReceiptData, user: UserData,
     const donorEmail = asDisplay(user.email ?? "-");
     const donatedAmount = formatCurrencyForPdf(receipt.amount ?? 0);
     const formattedAmount = donatedAmount;
-    const donationDate = asDisplay(new Date().toISOString().slice(0, 10));
+    const donationDate = formatReceiptDateForPdf(receipt);
     const transactionId = asDisplay(receipt.transaction_id ?? receipt.transaction_number ?? receipt.transaction_utr ?? receipt.receipt_number ?? "-");
     const causeForDonation = "VYWASTHA SHULK";
 
