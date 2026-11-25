@@ -8,8 +8,10 @@ export default withAuth(
     const isDashboardRoute = path === "/dashboard" || path.startsWith("/dashboard/");
     const isProfileRoute = path === "/profile" || path.startsWith("/profile/");
     const isAdminRoute = path === "/admin" || path.startsWith("/admin/");
+    const expiresAt = typeof token?.sessionExpiresAt === "number" ? token.sessionExpiresAt : undefined;
+    const isExpired = expiresAt !== undefined && Date.now() >= expiresAt;
 
-    if ((isDashboardRoute || isAdminRoute || isProfileRoute) && !token) {
+    if (((isDashboardRoute || isAdminRoute || isProfileRoute) && (!token || token.invalid || isExpired))) {
       return NextResponse.redirect(new URL("/login", req.url));
     }
 
@@ -23,6 +25,9 @@ export default withAuth(
     callbacks: {
       authorized: ({ token, req }) => {
         const path = req.nextUrl.pathname;
+        const expiresAt = typeof token?.sessionExpiresAt === "number" ? token.sessionExpiresAt : undefined;
+        const isExpired = expiresAt !== undefined && Date.now() >= expiresAt;
+        const isValidToken = !!token && !token.invalid && !isExpired;
 
         // Public routes
         if (
@@ -37,15 +42,15 @@ export default withAuth(
         }
 
         if ((path === "/dashboard" || path.startsWith("/dashboard/")) || (path === "/admin" || path.startsWith("/admin/"))) {
-          return !!token && !!token.is_admin;
+          return isValidToken && !!token?.is_admin;
         }
 
         if (path === "/profile" || path.startsWith("/profile/")) {
-          return !!token;
+          return isValidToken;
         }
 
         // Protected routes require auth
-        return !!token;
+        return isValidToken;
       },
     },
   },

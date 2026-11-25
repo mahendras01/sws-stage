@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { signOut } from "next-auth/react";
 
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, validatePasswordResetInput } from "@/lib/password-reset";
 
@@ -45,6 +46,7 @@ export default function UpdatePasswordForm() {
       setPassword("");
       setConfirmPassword("");
       setShowPassword(false);
+      await signOut({ callbackUrl: "/login" });
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to update the password right now.");
     } finally {

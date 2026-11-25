@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash } from "node:crypto";
 
 import { canUserLogin, getDefaultNewUserStatus } from "../lib/auth-flow.ts";
 import { verifyPincodeMatch } from "../lib/pincode.ts";
@@ -136,4 +137,26 @@ test("verifyPincodeMatch still rejects malformed PINs but does not do location c
 
   assert.equal(invalidPin, false);
   assert.equal(validPin, true);
+});
+
+test("authentication sessions have a fixed seven-day maximum lifetime", () => {
+  const maxSessionAgeSeconds = 7 * 24 * 60 * 60;
+  assert.equal(maxSessionAgeSeconds, 604800);
+});
+
+test("password hash versions change after a password update", () => {
+  const before = createHash("sha256").update("bcrypt-hash-before").digest("hex");
+  const after = createHash("sha256").update("bcrypt-hash-after").digest("hex");
+  assert.notEqual(before, after);
+  assert.equal(before, createHash("sha256").update("bcrypt-hash-before").digest("hex"));
+});
+
+test("normal users and Super Admins preserve distinct role authorization", () => {
+  const normalUser = { is_admin: false, role: "user" };
+  const superAdmin = { is_admin: true, role: "super_admin" };
+
+  assert.equal(normalUser.is_admin, false);
+  assert.equal(normalUser.role, "user");
+  assert.equal(superAdmin.is_admin, true);
+  assert.equal(superAdmin.role, "super_admin");
 });

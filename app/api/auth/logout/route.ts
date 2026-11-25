@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-options";
 
 export async function POST() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ success: true, message: "Already logged out" });
+    const response = NextResponse.json({ success: true, message: "Logged out successfully" });
+    for (const cookieName of [
+      "next-auth.session-token",
+      "__Secure-next-auth.session-token",
+      "next-auth.csrf-token",
+      "__Host-next-auth.csrf-token",
+    ]) {
+      response.cookies.set(cookieName, "", { path: "/", expires: new Date(0), httpOnly: true });
     }
-
-    // Client should call signOut from next-auth/react; this endpoint confirms logout intent
-    return NextResponse.json({ success: true, message: "Logged out successfully" });
+    return response;
   } catch {
     return NextResponse.json(
       { success: false, message: "Internal server error" },

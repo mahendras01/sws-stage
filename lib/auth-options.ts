@@ -1,9 +1,16 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+import { createHash } from "node:crypto";
 import { canUserLogin } from "./auth-flow";
 import { queryRows } from "./postgres";
 import { log, newRequestId, summarizeUser } from "./logger";
+
+export const MAX_SESSION_AGE_SECONDS = 7 * 24 * 60 * 60;
+
+export function passwordHashVersion(passwordHash: string) {
+  return createHash("sha256").update(passwordHash).digest("hex");
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -95,13 +102,15 @@ export const authOptions: NextAuthOptions = {
           role: user.role ?? "user",
           district: user.district,
           status: user.status,
+          passwordHashVersion: passwordHashVersion(user.password_hash),
         };
       },
     }),
   ],
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: MAX_SESSION_AGE_SECONDS,
+    updateAge: 0,
   },
   pages: {
     signIn: "/login",
@@ -114,49 +123,71 @@ export const authOptions: NextAuthOptions = {
         token.role = user.role ?? "user";
         token.district = user.district;
         token.status = user.status;
+        token.passwordHashVersion = (user as any).passwordHashVersion;
+        token.sessionExpiresAt = Date.now() + MAX_SESSION_AGE_SECONDS * 1000;
       }
+
+      const expiresAt = typeof token.sessionExpiresAt === "number"
+        ? token.sessionExpiresAt
+        : (typeof token.iat === "number" ? token.iat * 1000 : Date.now()) + MAX_SESSION_AGE_SECONDS * 1000;
+
+      if (Date.now() >= expiresAt) {
+        token.invalid = true;
+        return token;
+      }
+
+      token.sessionExpiresAt = expiresAt;
+
+      const userId = typeof token.id === "string" ? token.id : undefined;
+      if (!userId) {
+        token.invalid = true;
+        return token;
+      }
+
+      try {
+        const rows = await queryRows<any>(
+          "SELECT id, email, name, password_hash, status, is_admin, role, district FROM users WHERE id = $1 LIMIT 1",
+          [userId],
+        );
+        const freshUser = rows[0];
+
+        if (!freshUser || !canUserLogin(freshUser.status)) {
+          token.invalid = true;
+          return token;
+        }
+
+        const currentPasswordVersion = passwordHashVersion(freshUser.password_hash);
+        if (token.passwordHashVersion !== currentPasswordVersion) {
+          token.invalid = true;
+          return token;
+        }
+
+        token.id = freshUser.id;
+        token.email = freshUser.email;
+        token.name = freshUser.name;
+        token.is_admin = Boolean(freshUser.is_admin);
+        token.role = freshUser.role ?? "user";
+        token.district = freshUser.district ?? null;
+        token.status = freshUser.status ?? "pending";
+        token.invalid = false;
+      } catch (error) {
+        log.warn("auth.session.validation_failed", { userId, error: error instanceof Error ? error.message : String(error) });
+        token.invalid = true;
+      }
+
       return token;
     },
     async session({ session, token }) {
+      if (token.invalid) return null as any;
+
       if (session.user) {
-        const userId = typeof token.id === "string" ? token.id : undefined;
-
-        if (userId) {
-          let freshUser: any = null;
-          let error: any = null;
-
-          try {
-            const rows = await queryRows<any>(
-              "SELECT id, email, name, status, is_admin, role, district FROM users WHERE id = $1 LIMIT 1",
-              [userId],
-            );
-            freshUser = rows[0] ?? null;
-          } catch (dbError) {
-            error = dbError;
-          }
-
-          if (!error && freshUser) {
-            session.user.id = freshUser.id;
-            session.user.is_admin = Boolean(freshUser.is_admin);
-            session.user.role = freshUser.role ?? "user";
-            session.user.district = freshUser.district ?? null;
-            session.user.status = freshUser.status ?? "pending";
-            session.user.name = freshUser.name ?? session.user.name;
-            session.user.email = freshUser.email ?? session.user.email;
-          } else {
-            session.user.id = token.id;
-            session.user.is_admin = Boolean(token.is_admin);
-            session.user.role = (token.role as any) ?? "user";
-            session.user.district = (token.district as string | null) ?? null;
-            session.user.status = (token.status as any) ?? "pending";
-          }
-        } else {
-          session.user.id = token.id;
-          session.user.is_admin = Boolean(token.is_admin);
-          session.user.role = (token.role as any) ?? "user";
-          session.user.district = (token.district as string | null) ?? null;
-          session.user.status = (token.status as any) ?? "pending";
-        }
+        session.user.id = typeof token.id === "string" ? token.id : "";
+        session.user.is_admin = Boolean(token.is_admin);
+        session.user.role = (token.role as any) ?? "user";
+        session.user.district = (token.district as string | null) ?? null;
+        session.user.status = (token.status as any) ?? "pending";
+        session.user.name = (token.name as string | null) ?? session.user.name;
+        session.user.email = (token.email as string | null) ?? session.user.email;
       }
       return session;
     },

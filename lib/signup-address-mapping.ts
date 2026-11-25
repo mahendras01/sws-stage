@@ -3,6 +3,69 @@ export type PostingDetailsAddressInput = {
   street_locality?: string | null;
   village_city?: string | null;
   landmark?: string | null;
+  address?: {
+    houseFlatNo?: string | null;
+    house_flat_no?: string | null;
+    streetLocality?: string | null;
+    street_locality?: string | null;
+    locality?: string | null;
+    landmark?: string | null;
+    block?: string | null;
+    villageCity?: string | null;
+    village_city?: string | null;
+    district?: string | null;
+    districtName?: string | null;
+    state?: string | null;
+    stateName?: string | null;
+    pincode?: string | null;
+    postalCode?: string | null;
+    country?: string | null;
+  } | null;
+  permanentAddress?: {
+    houseFlatNo?: string | null;
+    house_flat_no?: string | null;
+    houseFlat?: string | null;
+    streetLocality?: string | null;
+    street_locality?: string | null;
+    locality?: string | null;
+    landmark?: string | null;
+    block?: string | null;
+    villageCity?: string | null;
+    village_city?: string | null;
+    district?: string | null;
+    districtName?: string | null;
+    state?: string | null;
+    stateName?: string | null;
+    pincode?: string | null;
+    postalCode?: string | null;
+    country?: string | null;
+  } | null;
+};
+
+export type NormalizedSignupAddress = {
+  house_flat_no?: string;
+  district?: string;
+  village_city?: string;
+  country?: string;
+  state?: string;
+  pincode?: string;
+  street_locality?: string;
+  landmark?: string;
+  permanent_house_flat_no?: string;
+  permanent_village_city?: string;
+  permanent_district?: string;
+  permanent_state?: string;
+  permanent_pincode?: string;
+  permanent_country?: string;
+};
+
+export type NormalizedPostingAddress = NormalizedSignupAddress & {
+  district: string;
+  village_city: string;
+  street_locality: string;
+  landmark: string;
+  state: string;
+  pincode: string;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -24,7 +87,7 @@ function firstNonEmptyString(...values: unknown[]): string {
   return "";
 }
 
-export function normalizeSignupAddressPayload<T extends Record<string, unknown>>(input: T): T {
+export function normalizeSignupAddressPayload<T extends Record<string, unknown>>(input: T): T & NormalizedSignupAddress {
   const next = { ...input } as Record<string, unknown>;
   const currentAddress = asRecord(next.address) ?? asRecord(next.currentAddress) ?? {};
   const permanentAddress = asRecord(next.permanentAddress) ?? asRecord(next.permanent_address) ?? {};
@@ -65,10 +128,10 @@ export function normalizeSignupAddressPayload<T extends Record<string, unknown>>
     next.village_city = villageCity;
   }
 
-  return next as T;
+  return next as T & NormalizedSignupAddress;
 }
 
-export function normalizePostingDetailsAddress<T extends PostingDetailsAddressInput>(input: T): T {
+export function normalizePostingDetailsAddress<T extends PostingDetailsAddressInput>(input: T): T & NormalizedPostingAddress {
   const normalized = normalizeSignupAddressPayload(input as Record<string, unknown>) as Record<string, unknown>;
   const district = firstNonEmptyString(normalized.district, normalized.street_locality).trim();
   const villageCity = firstNonEmptyString(normalized.village_city, normalized.landmark).trim();
@@ -83,5 +146,5 @@ export function normalizePostingDetailsAddress<T extends PostingDetailsAddressIn
     landmark: villageCity || firstNonEmptyString(normalized.landmark).trim(),
     state: state || normalized.state,
     pincode: pincode || normalized.pincode,
-  } as unknown as T;
+  } as unknown as T & NormalizedPostingAddress;
 }
